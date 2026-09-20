@@ -101,6 +101,11 @@ NORMAL_CONFESSION_THRESHOLD = 85
 CASE_SOLVED_THRESHOLD = 75
 REQUIRED_CASE_SCORE = 90
 
+# Prompt budget (Section 9): the investigator gets this many questions per
+# session before the interrogation ends without a confession. Defined once
+# here so server.py never duplicates the literal.
+MAX_PROMPTS = 15
+
 
 # ============================================================
 # EVIDENCE METADATA (Section 6)
@@ -200,7 +205,7 @@ class GameState:
         self.turn = 0
         self.stress = 0
         self.stress_state = "CALM"
-        self.status = "ACTIVE"  # ACTIVE, CONFESSION, TIMEOUT, DISQUALIFIED
+        self.status = "ACTIVE"  # ACTIVE, CONFESSION, TIMEOUT, OUT_OF_PROMPTS, DISQUALIFIED
 
         # 4 Discrete State Systems (Section 3)
         self.evidence_revealed = set()
@@ -256,6 +261,41 @@ def get_stress_state(stress: int) -> str:
 
 def update_stress(current_stress: int, delta: int) -> int:
     return max(0, min(100, current_stress + delta))
+
+
+# How much composure Adrian regains on a turn that applied no pressure.
+# Repeating yourself is the weakest move in an interrogation and costs the
+# most; an off-topic question wastes the turn but is not a tell.
+RECOVERY_VALUES = {
+    "REPEATED": -4,
+    "IRRELEVANT": -3,
+    "GENERIC": -2,
+}
+
+
+def recovery_delta(category: str, state: GameState) -> int:
+    """Composure regained on a wasted turn, as a negative stress delta.
+
+    Recovery is damped at the extremes so it cannot undo real progress: a
+    suspect who is already breaking does not become calm again because one
+    question missed, and there is nothing to recover from near zero.
+    """
+    base = RECOVERY_VALUES.get(category, 0)
+    if base == 0 or state.stress <= 0:
+        return 0
+
+    # Past the point of collapse, composure barely returns.
+    if state.stress >= BREAKING_RECOVERY_FLOOR:
+        base = max(base, -1)
+
+    # Never drop below the floor the player has already earned through
+    # established milestones — proven facts don't become unproven.
+    earned_floor = min(len([m for m in state.milestones.values() if m]) * 8, 40)
+    return max(base, earned_floor - state.stress)
+
+
+# Above this, Adrian is too far gone to meaningfully recover composure.
+BREAKING_RECOVERY_FLOOR = 81
 
 
 # ============================================================
@@ -381,6 +421,87 @@ def is_repeated_question(norm_q: str, history: list) -> bool:
             if similarity >= 0.85:
                 return True
     return False
+
+
+# ── Relevance gate ──────────────────────────────────────────────────────────
+# A detective interrogating a suspect is on-topic by default. The old scorer
+# used a closed whitelist of nouns, so ordinary interrogation language
+# ("Why did you lie to me?", "Did you enter the sub-basement?", "Who else had
+# access?") fell through to IRRELEVANT and was refused outright. That punished
+# players for asking real questions.
+#
+# The gate is now inverted: a question counts as on-case unless it is clearly
+# about something outside the investigation. Only an explicit off-topic signal,
+# or a question with no interrogative substance at all, is rejected.
+
+# Subjects that have nothing to do with the case. Kept deliberately narrow —
+# this list exists to catch chit-chat and prompt-poking, not to police wording.
+OFF_TOPIC_MARKERS = [
+    "weather", "football", "soccer", "basketball", "movie", "film", "netflix",
+    "song", "music", "recipe", "cook", "pizza", "restaurant menu",
+    "favourite colour", "favorite colour", "favourite color", "favorite color",
+    "favourite food", "favorite food", "joke", "riddle", "poem", "sing",
+    "capital of", "how old is the", "who is the president", "election",
+    "stock market", "bitcoin", "crypto", "horoscope", "zodiac",
+    "video game", "anime", "cartoon", "holiday", "vacation spot",
+]
+
+# Anything an investigator plausibly says to a suspect. Presence of any of
+# these makes a question on-case regardless of which nouns it uses.
+INTERROGATION_MARKERS = [
+    # direct address / accountability
+    "you", "your", "yours", "yourself",
+    # the case's people and places
+    "daniel", "mercer", "victim", "adrian", "vale", "aegis", "archive",
+    "sub-basement", "subbasement", "basement", "office", "building", "lab",
+    "corridor", "terminal", "server", "desk", "elevator", "lobby", "floor",
+    # the crime and its substance
+    "murder", "killed", "kill", "death", "died", "body", "weapon",
+    "paperweight", "glove", "blood", "crime", "attack", "struck",
+    # evidence and process
+    "evidence", "camera", "cctv", "footage", "log", "logs", "badge", "card",
+    "keycard", "record", "records", "phone", "call", "called", "file", "files",
+    "data", "database", "wipe", "wiped", "delete", "deleted", "signature",
+    "audit", "report", "project", "echo", "forensic", "fingerprint", "witness",
+    # timeline
+    "alibi", "time", "when", "night", "evening", "september", "21:", "2115",
+    "2139", "left", "leave", "arrive", "return", "returned", "after", "before",
+    # truthfulness and pressure
+    "lie", "lied", "lying", "truth", "honest", "admit", "confess", "deny",
+    "denied", "explain", "account", "story", "statement", "claim", "claimed",
+    "contradiction", "discrepancy", "inconsistent", "prove", "verify",
+    "believe", "sure", "certain", "guilty", "innocent", "did you", "do you",
+    "were you", "are you", "have you", "had you", "why", "how", "what", "who",
+    "where", "which", "anyone", "anybody", "someone", "somebody", "else",
+    # motive and relationship
+    "motive", "reason", "angry", "argument", "argue", "fight", "threat",
+    "threatened", "relationship", "colleague", "coworker", "friend", "knew",
+    "know", "hate", "jealous", "money", "promotion", "career", "job", "work",
+]
+
+
+def is_case_relevant(norm_q: str, state: GameState) -> bool:
+    """True when a question belongs in this interrogation.
+
+    Relevance is generous by design: refusing a legitimate question is far
+    worse for the game than letting a borderline one through, because a
+    refusal costs the player one of their limited prompts and teaches them
+    to distrust the parser.
+    """
+    if not norm_q or not norm_q.strip():
+        return False
+
+    # An explicit off-topic subject is refused even if phrased at the suspect
+    # ("what is your favourite colour" addresses him but is not about the case).
+    if any(marker in norm_q for marker in OFF_TOPIC_MARKERS):
+        return False
+
+    # Follow-ups lean on context rather than restating nouns ("and then?",
+    # "go on"). Once the interrogation is under way, treat them as on-case.
+    if state.question_history and len(norm_q.split()) <= 4:
+        return True
+
+    return any(marker in norm_q for marker in INTERROGATION_MARKERS)
 
 
 # ============================================================
@@ -530,12 +651,7 @@ def analyze_question(question: str, state: GameState) -> dict:
         category = "INCONSISTENCY"
     elif ev_count == 1:
         category = "CLUE"
-    elif any(k in norm_q for k in [
-        "daniel", "mercer", "murder", "killed", "death", "office",
-        "alibi", "night", "work", "desk", "coffee", "where were you",
-        "what were you", "that night", "september", "september 14",
-        "time of", "what happened", "aegis", "the company"
-    ]):
+    elif is_case_relevant(norm_q, state):
         category = "RELEVANT"
     else:
         category = "IRRELEVANT"
@@ -915,6 +1031,78 @@ def generate_fallback_character_response(question: str, state: GameState, pressu
     return chosen
 
 
+# Adrian's replies to questions that have nothing to do with the case. He is a
+# controlled man under suspicion, so he deflects rather than plays along — and
+# gets visibly less patient as the interrogation wears on.
+OFF_TOPIC_DEFLECTIONS = {
+    "CALM": [
+        "Is that relevant? I came here to clear this up, not to chat.",
+        "I don't see what that has to do with Daniel.",
+        "You can ask me that on your own time. Ask me about the case.",
+    ],
+    "ALERT": [
+        "We're wasting time. Ask me something that matters.",
+        "That isn't a question about the night of the fourteenth.",
+        "I'm answering questions about Daniel. Nothing else.",
+    ],
+    "DEFENSIVE": [
+        "Is this how you run an interrogation? Ask me something real.",
+        "I'm not doing this. Ask about the case or let me go.",
+        "You're fishing. That question has nothing to do with anything.",
+    ],
+    "PRESSURED": [
+        "Don't. Don't do that — ask me about the case.",
+        "I don't have to answer that, and you know it.",
+        "Stop playing games with me. Ask me what you actually want to ask.",
+    ],
+    "BREAKING": [
+        "What? No — that's not... ask me about Daniel. Just ask me.",
+        "I can't think straight and you're asking me that?",
+        "Please. Just ask me what you brought me here to ask.",
+    ],
+}
+
+
+def deflect_off_topic(state: GameState) -> str:
+    """An in-character brush-off, varied so repeats don't read as a canned error."""
+    pool = OFF_TOPIC_DEFLECTIONS.get(state.stress_state, OFF_TOPIC_DEFLECTIONS["CALM"])
+    for line in pool:
+        if line not in state.recent_responses[-5:]:
+            state.recent_responses.append(line)
+            return line
+    chosen = pool[0]
+    state.recent_responses.append(chosen)
+    return chosen
+
+
+# Adrian's line once the investigator is out of questions and did not get a
+# confession. He does not know about "prompts" — from his side the interview
+# is simply over, and his lawyer instincts kick in immediately.
+OUT_OF_PROMPTS_LINE = (
+    "We're done here. That's everything you're getting from me without my "
+    "lawyer in the room."
+)
+
+
+# Adrian's sign-off, appended to the answer he gives to the LAST permitted
+# question. Without it the interrogation simply stops responding, and the
+# player never sees him end it — the shutter comes down between turns with no
+# warning. He gets up and leaves on screen instead.
+CLOSING_LINE = (
+    "That's it. I've given you my whole evening and you've given me nothing "
+    "but insinuation. I'm leaving — anything else goes through my lawyer."
+)
+
+
+def out_of_prompts_response(state: GameState) -> str:
+    """In-character line for a question asked after the budget is spent.
+
+    Mirrors deflect_off_topic's shape rather than returning a system-voice
+    error: the fiction (an interrogation that has ended) stays intact.
+    """
+    return OUT_OF_PROMPTS_LINE
+
+
 async def ask_adrian_with_validator(question: str, state: GameState, pressure_point: str, category: str = "RELEVANT") -> dict:
     start_time = time.perf_counter()
 
@@ -927,10 +1115,13 @@ async def ask_adrian_with_validator(question: str, state: GameState, pressure_po
             "error": None
         }
 
-    # Handle irrelevant or misleading questions strictly
+    # Off-topic questions get deflected in character. A system-voice scolding
+    # ("You are typing an irrelevant question") breaks the fiction and tells
+    # the player they used a prompt on nothing; Adrian brushing it aside keeps
+    # them inside the interrogation and still signals the turn was wasted.
     if category == "IRRELEVANT":
         return {
-            "answer": "You are typing an irrelevant question. Please follow the case studies and ask relevant questions based on the case only.",
+            "answer": deflect_off_topic(state),
             "time": 0.1,
             "success": True,
             "error": None
@@ -1020,7 +1211,15 @@ async def process_turn(question: str, state: GameState) -> dict:
     recalculate_milestones(state)
 
     # 4. Calculate Stress Delta & Update Stress (Section 5 & 42)
+    #
+    # Pressure is not a ratchet. A suspect who is asked nothing of substance
+    # regains his footing, so weak turns cost the player ground instead of
+    # merely failing to gain it. Without this, any sequence of questions —
+    # however poor — walks stress to the confession threshold, and the
+    # interrogation stops being a skill test.
     delta = STRESS_VALUES[analysis["category"]]
+    if delta == 0:
+        delta = recovery_delta(analysis["category"], state)
     state.stress = update_stress(state.stress, delta)
     state.stress_state = get_stress_state(state.stress)
 
@@ -1029,11 +1228,26 @@ async def process_turn(question: str, state: GameState) -> dict:
         state.status = "CONFESSION"
         state.confession_unlocked = True
 
+    # 5b. Budget exhaustion (Section 9). Checked AFTER confession eligibility
+    # so that a confession triggered by the final permitted question always
+    # wins — the outcome is CONFESSION, never exhaustion, in that case.
+    if state.status == "ACTIVE" and state.turn >= MAX_PROMPTS:
+        state.status = "OUT_OF_PROMPTS"
+
     # 6. Determine Pressure Point (Section 24)
     pressure_point = determine_pressure_point(analysis, state)
 
     # 7. Generate Adrian's response (Section 45: generated AFTER state updates!)
     adrian_res = await ask_adrian_with_validator(question, state, pressure_point, category=analysis["category"])
+
+    # 7b. The last permitted question still gets a real answer, but Adrian ends
+    # the interview on screen rather than going silent between turns. A player
+    # who spends their final question deserves to see him get up and leave.
+    # A confession is already an ending of its own and is never appended to.
+    if state.status == "OUT_OF_PROMPTS" and adrian_res.get("success") and adrian_res.get("answer"):
+        adrian_res["answer"] = adrian_res["answer"] + "\n\n" + CLOSING_LINE
+
+
 
     # 8. Record turn in internal debug ledger (Section 30)
     ledger_entry = {

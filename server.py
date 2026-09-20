@@ -7,11 +7,11 @@ from pydantic import BaseModel
 
 # Import py module functions and GameState
 try:
-    from py import GameState, process_turn
+    from py import GameState, process_turn, MAX_PROMPTS, out_of_prompts_response
 except ImportError:
     # If imported from another path
     sys.path.append(os.path.dirname(__file__))
-    from py import GameState, process_turn
+    from py import GameState, process_turn, MAX_PROMPTS, out_of_prompts_response
 
 app = FastAPI(title="Prompt-X Interrogation API")
 
@@ -45,7 +45,7 @@ def get_state():
         "evidence_revealed": list(game_state.evidence_revealed),
         "facts_established": list(game_state.facts_established),
         "milestones": game_state.milestones,
-        "prompts_left": max(0, 15 - game_state.turn)
+        "prompts_left": max(0, MAX_PROMPTS - game_state.turn)
     }
 
 @app.post("/api/interrogate")
@@ -59,11 +59,24 @@ async def interrogate(req: QuestionRequest):
             "stress": game_state.stress,
             "stress_state": game_state.stress_state,
             "status": "CONFESSION",
-            "prompts_left": max(0, 15 - game_state.turn),
+            "prompts_left": max(0, MAX_PROMPTS - game_state.turn),
             "evidence_revealed": list(game_state.evidence_revealed),
             "milestones": game_state.milestones,
             "turn": game_state.turn,
             "confession": True
+        }
+
+    if game_state.status == "OUT_OF_PROMPTS":
+        return {
+            "response": out_of_prompts_response(game_state),
+            "stress": game_state.stress,
+            "stress_state": game_state.stress_state,
+            "status": "OUT_OF_PROMPTS",
+            "prompts_left": 0,
+            "evidence_revealed": list(game_state.evidence_revealed),
+            "milestones": game_state.milestones,
+            "turn": game_state.turn,
+            "confession": False
         }
 
     turn_result = await process_turn(req.question.strip(), game_state)
@@ -79,7 +92,7 @@ async def interrogate(req: QuestionRequest):
         "stress": game_state.stress,
         "stress_state": game_state.stress_state,
         "status": game_state.status,
-        "prompts_left": max(0, 15 - game_state.turn),
+        "prompts_left": max(0, MAX_PROMPTS - game_state.turn),
         "evidence_revealed": list(game_state.evidence_revealed),
         "milestones": game_state.milestones,
         "turn": game_state.turn,

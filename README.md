@@ -37,7 +37,7 @@ You interrogate **Adrian Vale**, Lead Data Analyst at Aegis Forensic Analytics, 
 
 3. **Install Python backend dependencies**
    ```bash
-   pip install fastapi uvicorn google-genai python-dotenv
+   pip install fastapi uvicorn google-genai python-dotenv pytest
    ```
 
 4. **Set up your Gemini API key**

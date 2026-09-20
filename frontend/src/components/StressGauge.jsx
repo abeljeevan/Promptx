@@ -1,29 +1,30 @@
-// Bands from the design guide's stress scale. Colour walks from the calm
-// terminal green through amber to the warning red as pressure builds.
-const BANDS = [
-  { max: 20, label: "CALM", color: "var(--px-terminal)" },
-  { max: 40, label: "DEFENSIVE", color: "#b9c96a" },
-  { max: 60, label: "IRRITATED", color: "var(--px-tungsten)" },
-  { max: 80, label: "AGITATED", color: "#c2652f" },
-  { max: 95, label: "UNSTABLE", color: "var(--px-warning)" },
-  { max: 100, label: "BREAKING", color: "#d43b2f" },
-];
+import { STRESS_TIERS, stressTier } from "./SuspectPortrait";
 
-function stressBand(stress) {
-  return BANDS.find((band) => stress <= band.max) ?? BANDS[BANDS.length - 1];
-}
+// Colour per tier, walking from the terminal green through tungsten to the
+// warning red. The tiers themselves come from SuspectPortrait so the gauge,
+// the portrait and the rules engine can never disagree about what state
+// Adrian is in.
+const TIER_COLOR = {
+  calm: "var(--px-terminal)",
+  alert: "#b9c96a",
+  defensive: "var(--px-tungsten)",
+  pressured: "#c2652f",
+  breaking: "var(--px-warning)",
+};
 
 export function StressGauge({ stress }) {
-  const band = stressBand(stress);
+  const tier = stressTier(stress);
+  const index = STRESS_TIERS.indexOf(tier);
 
   return (
     <div
-      className={`stress-gauge${band.label === "BREAKING" ? " stress-gauge-breaking" : ""}`}
-      style={{ "--stress-color": band.color }}
+      className={`stress-gauge${tier.id === "breaking" ? " stress-gauge-breaking" : ""}`}
+      data-tier={tier.id}
+      style={{ "--stress-color": TIER_COLOR[tier.id], "--tier-step": index }}
     >
       <div className="stress-gauge-head">
         <span>SUSPECT STRESS</span>
-        <span className="stress-gauge-state">{band.label}</span>
+        <span className="stress-gauge-state">{tier.label}</span>
       </div>
       <div
         className="stress-track"
@@ -31,8 +32,19 @@ export function StressGauge({ stress }) {
         aria-valuenow={stress}
         aria-valuemin={0}
         aria-valuemax={100}
+        aria-valuetext={`${stress} percent, ${tier.label}`}
         aria-label="Suspect stress level"
       >
+        {/* Tier boundaries, so a rising bar reads as progress toward breaking
+            him rather than an unmarked percentage. */}
+        {STRESS_TIERS.slice(0, -1).map((boundary) => (
+          <i
+            key={boundary.id}
+            className="stress-tick"
+            style={{ "--at": `${boundary.max}%` }}
+            aria-hidden="true"
+          />
+        ))}
         <div className="stress-fill" style={{ "--stress-scale": stress / 100 }} />
       </div>
       <div className="stress-value">{stress}%</div>

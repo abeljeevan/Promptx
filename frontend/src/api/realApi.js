@@ -10,6 +10,7 @@ export async function startGame(participantCode) {
       question_count: state.turn || 0,
       evidence_found: state.evidence_revealed || [],
       status: state.status || "ACTIVE",
+      prompts_left: state.prompts_left,
     };
   } catch (err) {
     console.error("startGame API error:", err);
@@ -20,6 +21,7 @@ export async function startGame(participantCode) {
       question_count: 0,
       evidence_found: [],
       status: "ACTIVE",
+      prompts_left: undefined,
     };
   }
 }
@@ -46,6 +48,8 @@ export async function askQuestion(sessionId, question) {
     milestone: completedMilestones,
     status: data.status || "ACTIVE",
     evidence_found: data.evidence_revealed || [],
+    // The server owns the prompt budget; the HUD must not keep its own count.
+    prompts_left: data.prompts_left,
   };
 }
 
@@ -67,5 +71,6 @@ export async function getState(sessionId) {
     question_count: data.turn || 0,
     evidence_found: data.evidence_revealed || [],
     status: data.status || "ACTIVE",
+    prompts_left: data.prompts_left,
   };
 }

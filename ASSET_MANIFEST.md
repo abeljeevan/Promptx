@@ -71,3 +71,26 @@ Suggested effects: use one low-opacity repeating-linear-gradient for scanlines; 
 ## Generation record
 
 Generated with the built-in image workflow, using the supplied reference solely as a visual-direction reference. Prompts emphasized practical tungsten lighting, dark brown/olive institutional materials, analog surveillance, empty compositing space, and avoidance of cyberpunk/modern dashboard styling.
+
+## Suspect expression frames
+
+`SuspectPortrait` crossfades a drawn frame per stress tier. Drop PNGs with these
+exact names into `frontend/public/assets/character/` and they are picked up
+automatically — no code change. Any tier without a file falls back to
+`suspect-portrait-source.png`, graded and moved by the CSS performance layer, so
+a partial set is fine and the game never shows a broken image.
+
+| File | Stress | Engine state | Direction |
+|---|---|---|---|
+| `suspect-calm.png` | 0–20 | CALM | Composed. Hands folded, steady eyes, nothing to hide. |
+| `suspect-alert.png` | 21–40 | ALERT | Registering danger. Slight brow tension, more watchful. |
+| `suspect-defensive.png` | 41–60 | DEFENSIVE | Guarding. Jaw set, shoulders closing, eye contact breaking. |
+| `suspect-pressured.png` | 61–80 | PRESSURED | Losing it. Sweat, flushed, gaze darting off-camera. |
+| `suspect-breaking.png` | 81–100 | BREAKING | Gone. Head lowered or hands to face, the composure spent. |
+
+Thresholds mirror `get_stress_state()` in `py.py`; if those change, update
+`STRESS_TIERS` in `frontend/src/components/SuspectPortrait.jsx` to match.
+
+**Requirements:** identical framing, camera distance and canvas size across all
+five, or the crossfade slides instead of dissolving. Transparent background —
+the room plate shows through. Match `suspect-portrait-source.png` dimensions.

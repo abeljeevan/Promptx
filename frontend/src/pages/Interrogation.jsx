@@ -15,7 +15,9 @@ import { DeskEvidenceStack } from "../components/DeskEvidenceStack";
 // import { SuspectTuner } from "../components/SuspectTuner";
 
 const ROUND_SECONDS = 12 * 60;
-const MAX_PROMPTS = 25;
+// Only used until the server reports its own budget — server.py owns the real
+// limit, and the HUD must never promise more questions than the engine allows.
+const MAX_PROMPTS_FALLBACK = 15;
 
 // const DEFAULT_TUNE = { width: 23, bottom: 20, left: 50, brightness: 101 };
 
@@ -29,6 +31,7 @@ export function Interrogation({ session, onStatusChange }) {
   const [error, setError] = useState("");
   const [sending, setSending] = useState(false);
   const [secondsRemaining, setSecondsRemaining] = useState(ROUND_SECONDS);
+  const [promptsLeft, setPromptsLeft] = useState(session.prompts_left ?? MAX_PROMPTS_FALLBACK);
   const [activeAction, setActiveAction] = useState("ask");
   const [showEvidenceList, setShowEvidenceList] = useState(false);
   // const [tune, setTune] = useState(DEFAULT_TUNE);   // TUNER
@@ -38,7 +41,6 @@ export function Interrogation({ session, onStatusChange }) {
   const inputRef = useRef(null);
 
   const lastReply = [...entries].reverse().find((entry) => entry.role === "adrian");
-  const promptsLeft = Math.max(0, MAX_PROMPTS - entries.filter((e) => e.role === "player").length);
 
   useEffect(() => {
     const id = window.setInterval(() => {
@@ -98,6 +100,7 @@ export function Interrogation({ session, onStatusChange }) {
       setStress(result.stress);
       setMilestone(result.milestone);
       setEvidenceFound(result.evidence_found);
+      if (result.prompts_left !== undefined) setPromptsLeft(result.prompts_left);
       if (result.status !== "ACTIVE") {
         onStatusChange({ ...session, ...result });
       }
@@ -119,6 +122,7 @@ export function Interrogation({ session, onStatusChange }) {
       const result = await askQuestion(session.session_id, `I am presenting ${title}. Explain this evidence.`);
       setEntries((prev) => [...prev, { role: "adrian", text: result.response }]);
       setStress(result.stress); setMilestone(result.milestone); setEvidenceFound(result.evidence_found);
+      if (result.prompts_left !== undefined) setPromptsLeft(result.prompts_left);
       if (result.status !== "ACTIVE") onStatusChange({ ...session, ...result });
       setOpenEvidence(null);
     } catch (err) { setError(err.message); } finally { setSending(false); }
