@@ -61,9 +61,23 @@ You interrogate **Adrian Vale**, Lead Data Analyst at Aegis Forensic Analytics, 
    ```
    Open `http://localhost:8080` in your browser.
 
+## 🌐 Deploying
+
+The repository includes a `Dockerfile` and `render.yaml` for a single-service
+deployment. The container builds the React app and FastAPI serves it and the
+`/api` endpoints from the same origin.
+
+1. Push this repository to GitHub and create a new Render Blueprint from it.
+2. Set the `GEMINI_API_KEY` environment variable in Render (it is intentionally
+   not stored in the repository).
+3. Deploy. Render will use the included health check at `/api/health`.
+
+The game remains playable without the key, using its rule-based fallback; set
+the key for live Gemini responses.
+
 ## 🕹 How to Play
 
-- You have **15 prompts** to interrogate Adrian Vale
+- You have **10 prompts** to interrogate Adrian Vale
 - Ask questions related to the case — evidence, timeline, alibi, motive
 - Irrelevant questions are flagged and ignored
 - Each relevant question increases **stress** on the suspect

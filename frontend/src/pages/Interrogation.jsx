@@ -14,10 +14,10 @@ import { DeskEvidenceStack } from "../components/DeskEvidenceStack";
 // const, the `tune` state, and the two JSX lines marked TUNER below.
 // import { SuspectTuner } from "../components/SuspectTuner";
 
-const ROUND_SECONDS = 12 * 60;
+const ROUND_SECONDS = 10 * 60;
 // Only used until the server reports its own budget — server.py owns the real
 // limit, and the HUD must never promise more questions than the engine allows.
-const MAX_PROMPTS_FALLBACK = 15;
+const MAX_PROMPTS_FALLBACK = 10;
 
 // const DEFAULT_TUNE = { width: 23, bottom: 20, left: 50, brightness: 101 };
 
@@ -48,6 +48,12 @@ export function Interrogation({ session, onStatusChange }) {
     }, 1000);
     return () => window.clearInterval(id);
   }, []);
+
+  useEffect(() => {
+    if (secondsRemaining === 0) {
+      onStatusChange({ ...session, status: "TIME_EXPIRED", stress });
+    }
+  }, [secondsRemaining, onStatusChange, session, stress]);
 
   const handleAction = (action) => {
     setActiveAction(action);

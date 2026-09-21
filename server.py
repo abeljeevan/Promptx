@@ -1,8 +1,11 @@
 import os
 import sys
 import asyncio
+from pathlib import Path
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 # Import py module functions and GameState
@@ -14,6 +17,9 @@ except ImportError:
     from py import GameState, process_turn, MAX_PROMPTS, out_of_prompts_response
 
 app = FastAPI(title="Prompt-X Interrogation API")
+
+PROJECT_ROOT = Path(__file__).resolve().parent
+FRONTEND_DIST = PROJECT_ROOT / "frontend" / "dist"
 
 # Enable CORS for local development
 app.add_middleware(
@@ -30,8 +36,8 @@ game_state = GameState("LIVE-SESSION")
 class QuestionRequest(BaseModel):
     question: str
 
-@app.get("/")
-def read_root():
+@app.get("/api/health")
+def health_check():
     return {"status": "ok", "message": "Prompt-X Interrogation API running"}
 
 @app.get("/api/state")
@@ -108,6 +114,21 @@ def reset_game():
         "message": "Game state reset successfully",
         "state": get_state()
     }
+
+
+# In deployment the frontend is built into frontend/dist and served by this
+# process.  The catch-all keeps client-side navigation working on page refresh.
+if FRONTEND_DIST.is_dir():
+    assets_dir = FRONTEND_DIST / "assets"
+    if assets_dir.is_dir():
+        app.mount("/assets", StaticFiles(directory=assets_dir), name="assets")
+
+    @app.get("/{path:path}", include_in_schema=False)
+    def serve_frontend(path: str):
+        requested_file = FRONTEND_DIST / path
+        if path and requested_file.is_file():
+            return FileResponse(requested_file)
+        return FileResponse(FRONTEND_DIST / "index.html")
 
 if __name__ == "__main__":
     import uvicorn

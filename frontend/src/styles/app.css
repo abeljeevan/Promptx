@@ -1468,3 +1468,47 @@ textarea {
   color: var(--px-terminal-dim);
   letter-spacing: 0.1em;
 }
+
+.new-case-button {
+  margin-top: 0.7rem;
+  border: 1px solid var(--px-terminal);
+  background: rgb(168 213 154 / 8%);
+  color: var(--px-terminal);
+  padding: 0.65rem 1rem;
+  font: inherit;
+  font-size: 0.72rem;
+  letter-spacing: 0.14em;
+  cursor: pointer;
+}
+
+.new-case-button:hover,
+.new-case-button:focus-visible {
+  background: rgb(168 213 154 / 18%);
+  outline: none;
+}
+
+.music-toggle {
+  position: fixed;
+  z-index: 20;
+  bottom: 3.65rem;
+  left: 1.5rem;
+  border: 1px solid var(--px-terminal-dim);
+  background: rgb(6 10 7 / 86%);
+  color: var(--px-terminal);
+  padding: 0.4rem 0.55rem;
+  font: inherit;
+  font-size: 0.64rem;
+  letter-spacing: 0.12em;
+  cursor: pointer;
+}
+
+.music-toggle:hover,
+.music-toggle:focus-visible {
+  border-color: var(--px-terminal);
+  outline: none;
+}
+
+.music-toggle:disabled {
+  cursor: not-allowed;
+  color: var(--px-terminal-dim);
+}

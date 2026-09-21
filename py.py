@@ -4,6 +4,9 @@ import time
 import sys
 import re
 import difflib
+import ssl
+
+import truststore
 
 sys.stdout.reconfigure(encoding='utf-8')
 
@@ -28,7 +31,17 @@ if not API_KEY and os.path.exists(".env"):
 
 client = None
 if API_KEY:
-    client = genai.Client(api_key=API_KEY)
+    # This app is often run on Windows networks that intercept HTTPS traffic.
+    # Use the operating system trust store instead of certifi's bundled CA file
+    # so the Gemini client can validate the locally trusted issuer.
+    tls_context = truststore.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+    client = genai.Client(
+        api_key=API_KEY,
+        http_options=types.HttpOptions(
+            client_args={"verify": tls_context},
+            async_client_args={"verify": tls_context},
+        ),
+    )
 else:
     print("[WARNING] GEMINI_API_KEY not found in environment or .env file.")
     print("           Adrian will respond using rule-based defense catalog fallback.")
@@ -104,7 +117,7 @@ REQUIRED_CASE_SCORE = 90
 # Prompt budget (Section 9): the investigator gets this many questions per
 # session before the interrogation ends without a confession. Defined once
 # here so server.py never duplicates the literal.
-MAX_PROMPTS = 15
+MAX_PROMPTS = 10
 
 
 # ============================================================

@@ -8,9 +8,15 @@ const CASE_SUMMARY = [
   ["MOTIVE", "Victim discovered forensic data manipulation"],
 ];
 
-export function Confession({ session }) {
+export function Confession({ session, onRestart }) {
   const [revealed, setRevealed] = useState(false);
   const confessed = session.status === "CONFESSION";
+  const endReason =
+    session.status === "OUT_OF_PROMPTS"
+      ? "10-PROMPT LIMIT REACHED"
+      : session.status === "TIME_EXPIRED"
+        ? "10-MINUTE TIME LIMIT REACHED"
+        : "INTERROGATION TERMINATED";
 
   useEffect(() => {
     const id = window.setTimeout(() => setRevealed(true), 1400);
@@ -21,7 +27,7 @@ export function Confession({ session }) {
     <main className="confession-screen">
       <h1 className="confession-headline">{confessed ? "CASE CLOSED" : "CASE UNRESOLVED"}</h1>
       <p className="confession-sub">
-        {confessed ? "ADRIAN VALE HAS CONFESSED" : "ADRIAN VALE WALKS"}
+        {confessed ? "ADRIAN VALE HAS CONFESSED" : `GAME OVER — ${endReason}`}
       </p>
 
       {confessed && session.response && (
@@ -43,6 +49,12 @@ export function Confession({ session }) {
         SESSION {session.session_id} — FINAL STRESS {session.stress}%
         {!confessed && " — NO CONFESSION RECORDED"}
       </p>
+
+      {!confessed && (
+        <button type="button" className="new-case-button" onClick={onRestart}>
+          OPEN NEW CASE
+        </button>
+      )}
     </main>
   );
 }
