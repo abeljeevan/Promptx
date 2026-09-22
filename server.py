@@ -59,6 +59,7 @@ game_state = GameState("LIVE-SESSION")
 
 class QuestionRequest(BaseModel):
     question: str
+    is_evidence_presentation: bool = False
 
 class ScoreRequest(BaseModel):
     player_name: str
@@ -116,7 +117,11 @@ async def interrogate(req: QuestionRequest):
             "confession": False
         }
 
-    turn_result = await process_turn(req.question.strip(), game_state)
+    turn_result = await process_turn(
+        req.question.strip(),
+        game_state,
+        consumes_prompt=not req.is_evidence_presentation,
+    )
     res = turn_result["adrian_res"]
     
     if not res["success"]:

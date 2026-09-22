@@ -9,6 +9,11 @@ const CASE_SUMMARY = [
   ["MOTIVE", "Victim discovered forensic data manipulation"],
 ];
 
+function formatTimeRemaining(secondsRemaining) {
+  const safe = Math.max(0, secondsRemaining ?? 0);
+  return `${String(Math.floor(safe / 60)).padStart(2, "0")}:${String(safe % 60).padStart(2, "0")}`;
+}
+
 export function Confession({ session, onRestart, onViewLeaderboard }) {
   const [revealed, setRevealed] = useState(false);
   const confessed = session.status === "CONFESSION";
@@ -18,6 +23,11 @@ export function Confession({ session, onRestart, onViewLeaderboard }) {
       : session.status === "TIME_EXPIRED"
         ? "10-MINUTE TIME LIMIT REACHED"
         : "INTERROGATION TERMINATED";
+  const caseSummary = [
+    ...CASE_SUMMARY,
+    ["TIME REMAINING", formatTimeRemaining(session.seconds_remaining)],
+    ["PROMPTS LEFT", String(session.prompts_left ?? 0).padStart(2, "0")],
+  ];
 
   const [playerName, setPlayerName] = useState("");
   const [scoreSubmitted, setScoreSubmitted] = useState(false);
@@ -64,7 +74,7 @@ export function Confession({ session, onRestart, onViewLeaderboard }) {
 
         {confessed && (
           <dl className={`confession-summary${revealed ? " confession-summary-visible" : ""}`}>
-            {CASE_SUMMARY.map(([label, value]) => (
+            {caseSummary.map(([label, value]) => (
               <div key={label} className="confession-row">
                 <dt>{label}</dt>
                 <dd>{value}</dd>
@@ -82,9 +92,9 @@ export function Confession({ session, onRestart, onViewLeaderboard }) {
           <form onSubmit={handleScoreSubmit} style={{ marginTop: "1rem", padding: "1.5rem", background: "rgba(0,0,0,0.4)", border: "1px solid var(--border-color)", borderRadius: "8px" }}>
             <h3 style={{ margin: "0 0 1rem 0", color: "var(--text-primary)" }}>SUBMIT REPORT TO COMMAND</h3>
             <div style={{ display: "flex", gap: "1rem" }}>
-              <input 
-                value={playerName} 
-                onChange={(e) => setPlayerName(e.target.value)} 
+              <input
+                value={playerName}
+                onChange={(e) => setPlayerName(e.target.value)}
                 placeholder="Enter Detective Name"
                 style={{ flex: 1 }}
                 autoComplete="off"
@@ -108,13 +118,13 @@ export function Confession({ session, onRestart, onViewLeaderboard }) {
           <button type="button" className="new-case-button" onClick={onRestart}>
             OPEN NEW CASE
           </button>
-          
-          <button 
-            type="button" 
-            onClick={onViewLeaderboard} 
-            style={{ 
-              background: "transparent", 
-              border: "1px solid var(--border-color)", 
+
+          <button
+            type="button"
+            onClick={onViewLeaderboard}
+            style={{
+              background: "transparent",
+              border: "1px solid var(--border-color)",
               color: "var(--text-secondary)",
               padding: "0.5rem 1rem",
             }}

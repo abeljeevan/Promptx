@@ -30,11 +30,11 @@ export async function startGame(participantCode) {
   }
 }
 
-export async function askQuestion(sessionId, question) {
+export async function askQuestion(sessionId, question, { isEvidencePresentation = false } = {}) {
   const res = await fetch("/api/interrogate", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ question }),
+    body: JSON.stringify({ question, is_evidence_presentation: isEvidencePresentation }),
   });
 
   if (!res.ok) {
