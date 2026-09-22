@@ -7,6 +7,8 @@ import { EvidencePanel } from "../components/EvidencePanel";
 import { EvidenceFolder } from "../components/evidence/EvidenceFolder";
 import { ActionBar } from "../components/ActionBar";
 import { DeskEvidenceStack } from "../components/DeskEvidenceStack";
+import { DanielFileCard } from "../components/DanielFileCard";
+import { DanielFileModal } from "../components/DanielFileModal";
 // Re-tuning the desk evidence? Uncomment this import, the evidenceTune state,
 // and the two JSX lines marked EVIDENCE TUNER below.
 // import { EvidenceTuner } from "../components/EvidenceTuner";
@@ -28,6 +30,7 @@ export function Interrogation({ session, onStatusChange }) {
   const [milestone, setMilestone] = useState(session.milestone ?? 0);
   const [evidenceFound, setEvidenceFound] = useState(session.evidence_found ?? []);
   const [openEvidence, setOpenEvidence] = useState(null);
+  const [showDanielFile, setShowDanielFile] = useState(false);
   const [error, setError] = useState("");
   const [sending, setSending] = useState(false);
   const [secondsRemaining, setSecondsRemaining] = useState(ROUND_SECONDS);
@@ -233,6 +236,9 @@ export function Interrogation({ session, onStatusChange }) {
       />
       {/* EVIDENCE TUNER: <EvidenceTuner values={evidenceTune} onChange={setEvidenceTune} /> */}
 
+      {/* Daniel Mercer victim file — right side of desk */}
+      <DanielFileCard onOpen={() => setShowDanielFile(true)} />
+
       <div className="hud-desk-sheet">
         <ActionBar active={activeAction} onSelect={handleAction} disabled={sending} />
       </div>
@@ -306,6 +312,10 @@ export function Interrogation({ session, onStatusChange }) {
 
       {openEvidence && (
         <EvidenceFolder evidenceId={openEvidence} onClose={() => setOpenEvidence(null)} onPresent={handlePresentEvidence} presenting={sending} />
+      )}
+
+      {showDanielFile && (
+        <DanielFileModal onClose={() => setShowDanielFile(false)} />
       )}
     </div>
   );

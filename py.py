@@ -23,7 +23,10 @@ GEMINI_SSL_CONTEXT = truststore.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
 # CONFIGURATION
 # ============================================================
 
-MODEL = "gemini-3.5-flash-lite"
+# This is the supported Gemini Flash model for the configured API key.  The
+# previously configured 3.5-lite name and the retired 2.5 model both caused
+# generation failures, forcing the game into its local fallback replies.
+MODEL = "gemini-3-flash-preview"
 
 # Load environment variable or local .env if available
 API_KEY = os.getenv("GEMINI_API_KEY")

@@ -2,6 +2,16 @@
   box-sizing: border-box;
 }
 
+@keyframes fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+@keyframes slide-up {
+  from { opacity: 0; transform: translateY(1.5rem); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
 body {
   margin: 0;
   background: var(--px-black);
@@ -1349,6 +1359,183 @@ textarea {
 .desk-file-paper strong { font-size: .72rem; line-height: 1.35; letter-spacing: .07em; }
 .desk-file-photo img { width: 100%; aspect-ratio: 1.38; object-fit: cover; display: block; border: .5rem solid #d8c8a4; outline: 1px solid #574630; filter: grayscale(.75) sepia(.28) contrast(.86); }
 .desk-file-label { display: block; margin-top: .28rem; font-size: .5rem; letter-spacing: .11em; text-shadow: 0 1px 3px #000; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* ── Daniel Mercer victim file card (right-side desk prop) ────────────────── */
+/* Sized to match .desk-file (10rem wide, landscape aspect ratio like the
+   photo evidence cards). Positioned above the footer so it never overlaps
+   the time / prompts / milestone stats bar.                                  */
+
+.daniel-file-card {
+  position: absolute;
+  right: 8rem;
+  /* Sits above the ~3.5rem footer bar, level with the left desk-files */
+  bottom: 4.5rem;
+  z-index: 7;
+  width: 10rem;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+  pointer-events: auto;
+  /* Shallow angle matching left desk-file style, mirrored */
+  transform: rotate(-8deg) skewY(-2deg);
+  filter: drop-shadow(.5rem .85rem .45rem rgb(0 0 0 / 50%));
+  transition: transform 180ms ease-out, filter 180ms ease-out;
+}
+
+.daniel-file-card:hover,
+.daniel-file-card:focus-visible {
+  /* Identical glow + lift to .desk-file:hover */
+  transform: rotate(-8deg) skewY(-2deg) translateY(-.65rem);
+  filter: brightness(1.14) drop-shadow(.6rem 1rem .7rem rgb(0 0 0 / 68%));
+  outline: 1px solid var(--px-terminal);
+  outline-offset: .25rem;
+  z-index: 8;
+}
+
+.daniel-file-thumb {
+  width: 100%;
+  /* Landscape crop to match the photo evidence card aspect ratio */
+  aspect-ratio: 1.38;
+  display: block;
+  object-fit: cover;
+  object-position: top center;
+  border: .5rem solid #d8c8a4;
+  outline: 1px solid #574630;
+  filter: saturate(.82) contrast(.93) sepia(.12);
+}
+
+.daniel-file-tag {
+  display: block;
+  margin-top: .28rem;
+  font-size: .5rem;
+  letter-spacing: .11em;
+  color: var(--px-paper);
+  text-shadow: 0 1px 3px #000;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+
+/* ── Daniel File lightbox modal ───────────────────────────────────────────── */
+
+.daniel-modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  background: rgb(4 3 2 / 92%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem;
+  backdrop-filter: blur(3px);
+  animation: fade-in 150ms ease-out;
+}
+
+.daniel-modal-inner {
+  position: relative;
+  width: min(60rem, 100%);
+  max-height: 92vh;
+  display: flex;
+  flex-direction: column;
+  background: #181410;
+  border: 1px solid #4a3821;
+  box-shadow: 0 2.5rem 6rem rgb(0 0 0 / 80%);
+  overflow: hidden;
+  animation: slide-up 200ms ease-out;
+}
+
+.daniel-modal-inner::before {
+  content: "";
+  position: absolute;
+  inset: .4rem;
+  border: 1px solid rgb(74 56 33 / 35%);
+  pointer-events: none;
+  z-index: 1;
+}
+
+.daniel-modal-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  padding: .9rem 1.2rem .75rem;
+  border-bottom: 1px solid rgb(255 200 100 / 18%);
+  background: rgb(20 15 8 / 90%);
+  flex-shrink: 0;
+}
+
+.daniel-modal-title-group {
+  display: flex;
+  flex-direction: column;
+  gap: .18rem;
+}
+
+.daniel-modal-label {
+  font-size: .52rem;
+  letter-spacing: .14em;
+  color: rgb(180 155 100 / 70%);
+}
+
+.daniel-modal-title {
+  margin: 0;
+  font-size: 1.15rem;
+  font-weight: 700;
+  letter-spacing: .12em;
+  color: #e8d8ae;
+}
+
+.daniel-modal-ref {
+  font-size: .5rem;
+  letter-spacing: .1em;
+  color: rgb(180 155 100 / 55%);
+}
+
+.daniel-modal-stamp {
+  font-size: .62rem;
+  font-weight: 800;
+  letter-spacing: .16em;
+  color: #c0392b;
+  border: 2px solid #c0392b;
+  padding: .2rem .5rem;
+  opacity: .85;
+  transform: rotate(-3deg);
+  display: inline-block;
+  flex-shrink: 0;
+}
+
+.daniel-modal-body {
+  overflow-y: auto;
+  flex: 1;
+  padding: 1rem 1.2rem;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+}
+
+.daniel-modal-img {
+  width: 100%;
+  max-width: 58rem;
+  display: block;
+  object-fit: contain;
+  border: .5rem solid #2a2016;
+  outline: 1px solid #4a3821;
+  filter: contrast(.96) saturate(.92);
+  border-radius: 1px;
+}
+
+.daniel-modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  padding: .75rem 1.2rem;
+  border-top: 1px solid rgb(255 200 100 / 14%);
+  background: rgb(20 15 8 / 90%);
+  flex-shrink: 0;
+}
+
+@media (max-width: 900px) {
+  .daniel-file-card { display: none; }
+}
 
 .hud-desk-sheet {
   width: min(31vw, 29rem);
