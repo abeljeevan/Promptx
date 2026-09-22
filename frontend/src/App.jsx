@@ -2,15 +2,21 @@ import { useState } from "react";
 import { Start } from "./pages/Start";
 import { Interrogation } from "./pages/Interrogation";
 import { Confession } from "./pages/Confession";
+import { Leaderboard } from "./pages/Leaderboard";
 import { BackgroundMusic } from "./components/BackgroundMusic";
 import "./styles/tokens.css";
 import "./styles/app.css";
 
 export default function App() {
   const [session, setSession] = useState(null);
+  const [viewLeaderboard, setViewLeaderboard] = useState(false);
+
+  if (viewLeaderboard) {
+    return <Leaderboard onBack={() => setViewLeaderboard(false)} />;
+  }
 
   if (!session) {
-    return <Start onStarted={setSession} />;
+    return <Start onStarted={setSession} onViewLeaderboard={() => setViewLeaderboard(true)} />;
   }
 
   const isConfession = session.status === "CONFESSION";
@@ -43,7 +49,14 @@ export default function App() {
     return (
       <>
         <BackgroundMusic {...music} />
-        <Confession session={session} onRestart={() => setSession(null)} />
+        <Confession 
+          session={session} 
+          onRestart={() => setSession(null)} 
+          onViewLeaderboard={() => {
+            setSession(null);
+            setViewLeaderboard(true);
+          }}
+        />
       </>
     );
   }

@@ -1,1 +1,1 @@
-export { startGame, askQuestion, getState } from "./realApi";
+export { startGame, askQuestion, getState, submitScore, getLeaderboard } from "./realApi";

@@ -1,6 +1,8 @@
 import os
 import sys
 import asyncio
+import sqlite3
+import datetime
 from pathlib import Path
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -21,6 +23,28 @@ app = FastAPI(title="Prompt-X Interrogation API")
 PROJECT_ROOT = Path(__file__).resolve().parent
 FRONTEND_DIST = PROJECT_ROOT / "frontend" / "dist"
 
+# Setup SQLite Database for Leaderboard
+DB_PATH = PROJECT_ROOT / "leaderboard.db"
+
+def init_db():
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS leaderboard (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            player_name TEXT NOT NULL,
+            turn_count INTEGER NOT NULL,
+            stress_level INTEGER NOT NULL,
+            evidence_count INTEGER NOT NULL,
+            facts_count INTEGER NOT NULL,
+            timestamp TEXT NOT NULL
+        )
+    ''')
+    conn.commit()
+    conn.close()
+
+init_db()
+
 # Enable CORS for local development
 app.add_middleware(
     CORSMiddleware,
@@ -35,6 +59,13 @@ game_state = GameState("LIVE-SESSION")
 
 class QuestionRequest(BaseModel):
     question: str
+
+class ScoreRequest(BaseModel):
+    player_name: str
+    turn_count: int
+    stress_level: int
+    evidence_count: int
+    facts_count: int
 
 @app.get("/api/health")
 def health_check():
@@ -114,6 +145,35 @@ def reset_game():
         "message": "Game state reset successfully",
         "state": get_state()
     }
+
+@app.post("/api/leaderboard")
+def submit_score(req: ScoreRequest):
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    timestamp = datetime.datetime.now().isoformat()
+    cursor.execute('''
+        INSERT INTO leaderboard (player_name, turn_count, stress_level, evidence_count, facts_count, timestamp)
+        VALUES (?, ?, ?, ?, ?, ?)
+    ''', (req.player_name, req.turn_count, req.stress_level, req.evidence_count, req.facts_count, timestamp))
+    conn.commit()
+    conn.close()
+    return {"message": "Score saved successfully"}
+
+@app.get("/api/leaderboard")
+def get_leaderboard():
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    cursor = conn.cursor()
+    # Rank primarily by fewest turns, then most evidence, then most facts
+    cursor.execute('''
+        SELECT player_name, turn_count, stress_level, evidence_count, facts_count, timestamp 
+        FROM leaderboard 
+        ORDER BY turn_count ASC, evidence_count DESC, facts_count DESC
+        LIMIT 10
+    ''')
+    rows = cursor.fetchall()
+    conn.close()
+    return {"leaderboard": [dict(row) for row in rows]}
 
 
 # In deployment the frontend is built into frontend/dist and served by this
