@@ -96,7 +96,6 @@ export function Interrogation({ session, onStatusChange }) {
       inputRef.current?.focus();
     }
   }, [sending, activeAction, openEvidence]);
-
   const handleSend = async () => {
     const trimmed = question.trim();
     if (!trimmed || sending) return;
@@ -120,6 +119,7 @@ export function Interrogation({ session, onStatusChange }) {
       setError(err.message);
     } finally {
       setSending(false);
+      inputRef.current?.focus();
     }
   };
 
