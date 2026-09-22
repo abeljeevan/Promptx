@@ -4,14 +4,33 @@ import time
 import sys
 import re
 import difflib
-import ssl
-
-import truststore
+import socket
+import json
+from urllib.request import Request, urlopen
 
 sys.stdout.reconfigure(encoding='utf-8')
 
-from google import genai
-from google.genai import types
+
+# The local network's application DNS resolver intermittently times out for
+# Gemini while direct HTTPS to Google's resolved address works. Keep this
+# narrowly scoped to the Gemini API hostname so the game can still use the
+# configured API key without changing machine-wide DNS settings.
+GEMINI_API_HOST = "generativelanguage.googleapis.com"
+GEMINI_API_FALLBACK_IP = "172.217.113.4"
+_system_getaddrinfo = socket.getaddrinfo
+
+
+def _resolve_gemini_api(host, port, *args, **kwargs):
+    # httpx/httpcore may hand the resolver a bytes hostname, while standard
+    # library callers pass text. Handle both forms.
+    if host == GEMINI_API_HOST:
+        host = GEMINI_API_FALLBACK_IP
+    elif host == GEMINI_API_HOST.encode("ascii"):
+        host = GEMINI_API_FALLBACK_IP.encode("ascii")
+    return _system_getaddrinfo(host, port, *args, **kwargs)
+
+
+socket.getaddrinfo = _resolve_gemini_api
 
 
 # ============================================================
@@ -29,23 +48,33 @@ if not API_KEY and os.path.exists(".env"):
                 API_KEY = _line.strip().split("=", 1)[1].strip().strip('"').strip("'")
                 break
 
-client = None
-if API_KEY:
-    # This app is often run on Windows networks that intercept HTTPS traffic.
-    # Use the operating system trust store instead of certifi's bundled CA file
-    # so the Gemini client can validate the locally trusted issuer.
-    tls_context = truststore.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
-    client = genai.Client(
-        api_key=API_KEY,
-        http_options=types.HttpOptions(
-            client_args={"verify": tls_context},
-            async_client_args={"verify": tls_context},
-        ),
-    )
-else:
+if not API_KEY:
     print("[WARNING] GEMINI_API_KEY not found in environment or .env file.")
     print("           Adrian will respond using rule-based defense catalog fallback.")
     print("           To enable live Gemini AI generation, set GEMINI_API_KEY in a local .env file.")
+
+
+def generate_gemini_content(prompt: str) -> str:
+    """Generate a response through Gemini's REST API.
+
+    The installed SDK's HTTP transport stalls on this machine, while a direct
+    request to the same endpoint succeeds. This keeps Gemini generation live
+    and continues to read the API key exclusively from the local environment.
+    """
+    request_body = {
+        "contents": [{"role": "user", "parts": [{"text": prompt}]}],
+        "generationConfig": {"temperature": 0.8, "maxOutputTokens": 250},
+    }
+    request = Request(
+        f"https://{GEMINI_API_HOST}/v1beta/models/{MODEL}:generateContent",
+        data=json.dumps(request_body).encode("utf-8"),
+        headers={"x-goog-api-key": API_KEY, "Content-Type": "application/json"},
+        method="POST",
+    )
+    with urlopen(request, timeout=10) as response:
+        payload = json.loads(response.read().decode("utf-8"))
+
+    return payload["candidates"][0]["content"]["parts"][0]["text"]
 
 
 # ============================================================
@@ -1166,8 +1195,8 @@ async def ask_adrian_with_validator(question: str, state: GameState, pressure_po
     chosen_defence = select_defence(pressure_point.lower(), state)
     strategy = select_response_strategy(state.stress, pressure_point, state)
 
-    # If no LLM client configured, use dynamic context-aware character fallback engine
-    if not client:
+    # If no API key is configured, use the dynamic context-aware fallback engine.
+    if not API_KEY:
         answer = generate_fallback_character_response(question, state, pressure_point, strategy, chosen_defence, category)
         return {
             "answer": answer,
@@ -1182,17 +1211,18 @@ async def ask_adrian_with_validator(question: str, state: GameState, pressure_po
         prompt = build_adrian_prompt(question, state, strategy, pressure_point, chosen_defence, category)
 
         try:
-            response = await asyncio.to_thread(
-                client.models.generate_content,
-                model=MODEL,
-                contents=prompt,
-                config=types.GenerateContentConfig(
-                    temperature=0.8,
-                    max_output_tokens=250
-                )
+            # Keep the game responsive if Gemini is unreachable or slow. The
+            # rule-based engine below provides an in-character answer instead
+            # of leaving the browser waiting indefinitely.
+            response = await asyncio.wait_for(
+                asyncio.to_thread(
+                    generate_gemini_content,
+                    prompt,
+                ),
+                timeout=12,
             )
 
-            raw_text = response.text.strip() if response.text else ""
+            raw_text = response.strip() if response else ""
             # Strip accidental self-prefixing
             if raw_text.startswith("Adrian:") or raw_text.startswith("Adrian Vale:"):
                 raw_text = re.sub(r'^Adrian(\s+Vale)?:\s*', '', raw_text)
@@ -1206,12 +1236,21 @@ async def ask_adrian_with_validator(question: str, state: GameState, pressure_po
                 # Rotate strategy for next attempt
                 strategy = select_response_strategy(state.stress, pressure_point, state)
 
-        except Exception as e:
+        except Exception as exc:
+            # Keep the player experience responsive, but retain enough local
+            # diagnostics to distinguish an API failure from a fallback reply.
+            print(
+                f"[WARNING] Gemini generation failed: {type(exc).__name__}: {exc}",
+                flush=True,
+            )
+            answer = generate_fallback_character_response(
+                question, state, pressure_point, strategy, chosen_defence, category
+            )
             return {
-                "answer": None,
+                "answer": answer,
                 "time": time.perf_counter() - start_time,
-                "success": False,
-                "error": str(e)
+                "success": True,
+                "error": None
             }
 
     elapsed = time.perf_counter() - start_time
@@ -1232,8 +1271,15 @@ async def ask_adrian_with_validator(question: str, state: GameState, pressure_po
 # TURN PROCESSOR (Pipeline Section 44 & 45)
 # ============================================================
 
-async def process_turn(question: str, state: GameState) -> dict:
-    state.turn += 1
+async def process_turn(question: str, state: GameState, consumes_prompt: bool = True) -> dict:
+    """Process one interrogation action.
+
+    Presenting a physical item is a pressure action, not a spoken prompt, so
+    it updates evidence, stress, and the response without spending the limited
+    question budget.
+    """
+    if consumes_prompt:
+        state.turn += 1
 
     # 1. Analyze question against case facts & evidence (Section 44)
     analysis = analyze_question(question, state)
@@ -1270,7 +1316,7 @@ async def process_turn(question: str, state: GameState) -> dict:
     # 5b. Budget exhaustion (Section 9). Checked AFTER confession eligibility
     # so that a confession triggered by the final permitted question always
     # wins — the outcome is CONFESSION, never exhaustion, in that case.
-    if state.status == "ACTIVE" and state.turn >= MAX_PROMPTS:
+    if state.status == "ACTIVE" and consumes_prompt and state.turn >= MAX_PROMPTS:
         state.status = "OUT_OF_PROMPTS"
 
     # 6. Determine Pressure Point (Section 24)

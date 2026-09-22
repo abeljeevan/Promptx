@@ -8,6 +8,11 @@ const CASE_SUMMARY = [
   ["MOTIVE", "Victim discovered forensic data manipulation"],
 ];
 
+function formatTimeRemaining(secondsRemaining) {
+  const safe = Math.max(0, secondsRemaining ?? 0);
+  return `${String(Math.floor(safe / 60)).padStart(2, "0")}:${String(safe % 60).padStart(2, "0")}`;
+}
+
 export function Confession({ session, onRestart }) {
   const [revealed, setRevealed] = useState(false);
   const confessed = session.status === "CONFESSION";
@@ -17,6 +22,11 @@ export function Confession({ session, onRestart }) {
       : session.status === "TIME_EXPIRED"
         ? "10-MINUTE TIME LIMIT REACHED"
         : "INTERROGATION TERMINATED";
+  const caseSummary = [
+    ...CASE_SUMMARY,
+    ["TIME REMAINING", formatTimeRemaining(session.seconds_remaining)],
+    ["PROMPTS LEFT", String(session.prompts_left ?? 0).padStart(2, "0")],
+  ];
 
   useEffect(() => {
     const id = window.setTimeout(() => setRevealed(true), 1400);
@@ -36,7 +46,7 @@ export function Confession({ session, onRestart }) {
 
       {confessed && (
         <dl className={`confession-summary${revealed ? " confession-summary-visible" : ""}`}>
-          {CASE_SUMMARY.map(([label, value]) => (
+          {caseSummary.map(([label, value]) => (
             <div key={label} className="confession-row">
               <dt>{label}</dt>
               <dd>{value}</dd>

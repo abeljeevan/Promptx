@@ -51,9 +51,15 @@ export function Interrogation({ session, onStatusChange }) {
 
   useEffect(() => {
     if (secondsRemaining === 0) {
-      onStatusChange({ ...session, status: "TIME_EXPIRED", stress });
+      onStatusChange({
+        ...session,
+        status: "TIME_EXPIRED",
+        stress,
+        prompts_left: promptsLeft,
+        seconds_remaining: 0,
+      });
     }
-  }, [secondsRemaining, onStatusChange, session, stress]);
+  }, [secondsRemaining, onStatusChange, promptsLeft, session, stress]);
 
   const handleAction = (action) => {
     setActiveAction(action);
@@ -113,7 +119,12 @@ export function Interrogation({ session, onStatusChange }) {
       setEvidenceFound(result.evidence_found);
       if (result.prompts_left !== undefined) setPromptsLeft(result.prompts_left);
       if (result.status !== "ACTIVE") {
-        onStatusChange({ ...session, ...result });
+        onStatusChange({
+          ...session,
+          ...result,
+          prompts_left: result.prompts_left ?? promptsLeft,
+          seconds_remaining: secondsRemaining,
+        });
       }
     } catch (err) {
       setError(err.message);
@@ -130,11 +141,22 @@ export function Interrogation({ session, onStatusChange }) {
     setError("");
     setEntries((prev) => [...prev, { role: "player", text: `[PRESENTED EVIDENCE: ${title}]` }]);
     try {
-      const result = await askQuestion(session.session_id, `I am presenting ${title}. Explain this evidence.`);
+      const result = await askQuestion(
+        session.session_id,
+        `I am presenting ${title}. Explain this evidence.`,
+        { isEvidencePresentation: true },
+      );
       setEntries((prev) => [...prev, { role: "adrian", text: result.response }]);
       setStress(result.stress); setMilestone(result.milestone); setEvidenceFound(result.evidence_found);
       if (result.prompts_left !== undefined) setPromptsLeft(result.prompts_left);
-      if (result.status !== "ACTIVE") onStatusChange({ ...session, ...result });
+      if (result.status !== "ACTIVE") {
+        onStatusChange({
+          ...session,
+          ...result,
+          prompts_left: result.prompts_left ?? promptsLeft,
+          seconds_remaining: secondsRemaining,
+        });
+      }
       setOpenEvidence(null);
     } catch (err) { setError(err.message); } finally { setSending(false); }
   };
@@ -248,7 +270,13 @@ export function Interrogation({ session, onStatusChange }) {
             <button
               type="button"
               className="action-danger"
-              onClick={() => onStatusChange({ ...session, status: "ENDED", stress })}
+              onClick={() => onStatusChange({
+                ...session,
+                status: "ENDED",
+                stress,
+                prompts_left: promptsLeft,
+                seconds_remaining: secondsRemaining,
+              })}
             >
               CONFIRM END
             </button>
