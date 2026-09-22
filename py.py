@@ -4,33 +4,19 @@ import time
 import sys
 import re
 import difflib
-import socket
 import json
+import ssl
 from urllib.request import Request, urlopen
+from urllib.parse import urlencode
+from urllib.error import HTTPError
+
+import truststore
 
 sys.stdout.reconfigure(encoding='utf-8')
 
 
-# The local network's application DNS resolver intermittently times out for
-# Gemini while direct HTTPS to Google's resolved address works. Keep this
-# narrowly scoped to the Gemini API hostname so the game can still use the
-# configured API key without changing machine-wide DNS settings.
 GEMINI_API_HOST = "generativelanguage.googleapis.com"
-GEMINI_API_FALLBACK_IP = "172.217.113.4"
-_system_getaddrinfo = socket.getaddrinfo
-
-
-def _resolve_gemini_api(host, port, *args, **kwargs):
-    # httpx/httpcore may hand the resolver a bytes hostname, while standard
-    # library callers pass text. Handle both forms.
-    if host == GEMINI_API_HOST:
-        host = GEMINI_API_FALLBACK_IP
-    elif host == GEMINI_API_HOST.encode("ascii"):
-        host = GEMINI_API_FALLBACK_IP.encode("ascii")
-    return _system_getaddrinfo(host, port, *args, **kwargs)
-
-
-socket.getaddrinfo = _resolve_gemini_api
+GEMINI_SSL_CONTEXT = truststore.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
 
 
 # ============================================================
@@ -57,22 +43,32 @@ if not API_KEY:
 def generate_gemini_content(prompt: str) -> str:
     """Generate a response through Gemini's REST API.
 
-    The installed SDK's HTTP transport stalls on this machine, while a direct
-    request to the same endpoint succeeds. This keeps Gemini generation live
-    and continues to read the API key exclusively from the local environment.
+    The request uses the operating system's trusted certificate store and
+    resolves the Gemini hostname normally.
     """
     request_body = {
         "contents": [{"role": "user", "parts": [{"text": prompt}]}],
         "generationConfig": {"temperature": 0.8, "maxOutputTokens": 250},
     }
     request = Request(
-        f"https://{GEMINI_API_HOST}/v1beta/models/{MODEL}:generateContent",
+        f"https://{GEMINI_API_HOST}/v1beta/models/{MODEL}:generateContent?"
+        f"{urlencode({'key': API_KEY})}",
         data=json.dumps(request_body).encode("utf-8"),
-        headers={"x-goog-api-key": API_KEY, "Content-Type": "application/json"},
+        headers={
+            "Content-Type": "application/json",
+            "User-Agent": "Prompt-X/1.0",
+        },
         method="POST",
     )
-    with urlopen(request, timeout=10) as response:
-        payload = json.loads(response.read().decode("utf-8"))
+    for attempt in range(2):
+        try:
+            with urlopen(request, timeout=30, context=GEMINI_SSL_CONTEXT) as response:
+                payload = json.loads(response.read().decode("utf-8"))
+            break
+        except HTTPError as exc:
+            if exc.code not in {429, 500, 502, 503, 504} or attempt:
+                raise
+            time.sleep(2)
 
     return payload["candidates"][0]["content"]["parts"][0]["text"]
 
@@ -1219,7 +1215,7 @@ async def ask_adrian_with_validator(question: str, state: GameState, pressure_po
                     generate_gemini_content,
                     prompt,
                 ),
-                timeout=12,
+                timeout=32,
             )
 
             raw_text = response.strip() if response else ""
