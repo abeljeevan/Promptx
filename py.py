@@ -345,20 +345,45 @@ BREAKING_RECOVERY_FLOOR = 81
 # CASE SOLUTION SCORE (Section 15)
 # ============================================================
 
-def calculate_solution_score(state: GameState) -> int:
+def calculate_solution_score(state: GameState, time_taken: int = 600) -> int:
     score = 0
-    if state.milestones["timeline"]:
-        score += CASE_WEIGHTS["timeline"]
-    if state.milestones["location"]:
-        score += CASE_WEIGHTS["location"]
-    if state.milestones["contact"]:
-        score += CASE_WEIGHTS["contact"]
-    if state.milestones["motive"]:
-        score += CASE_WEIGHTS["motive"]
+    
+    # 1. MAJOR MILESTONES - 40 POINTS
+    if state.milestones.get("timeline"):
+        score += 8
+    if state.milestones.get("location"):
+        score += 8
+    if state.milestones.get("contact"):
+        score += 8
+    if state.milestones.get("motive"):
+        score += 8
     if "physical_clue" in state.evidence_revealed or "paperweight_murder_weapon" in state.facts_established:
-        score += CASE_WEIGHTS["physical"]
-    if state.milestones["final"]:
-        score += CASE_WEIGHTS["final"]
+        score += 8
+        
+    # 2. EVIDENCE CONNECTIONS - 25 POINTS (5 pts per evidence, max 5)
+    evidence_score = min(25, len(state.evidence_revealed) * 5)
+    score += evidence_score
+    
+    # 3. FINAL CONFESSION - 25 POINTS
+    if state.status == "CONFESSION":
+        score += 25
+        
+    # 4. PROMPT EFFICIENCY - 5 POINTS
+    if state.turn <= 2:
+        score += 5
+    elif state.turn <= 4:
+        score += 4
+    elif state.turn <= 6:
+        score += 3
+    elif state.turn <= 8:
+        score += 2
+    elif state.turn <= 9:
+        score += 1
+        
+    # 5. TIME REMAINING - 5 POINTS
+    minutes_remaining = max(0, int((600 - time_taken) / 60))
+    score += min(5, minutes_remaining)
+    
     return score
 
 

@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { getLeaderboard } from "../api";
+import { getLeaderboard, getMyRank } from "../api";
 
 const MEDALS = {
   0: { icon: "🥇", color: "#c9a02d", borderColor: "#c9a02d22", bg: "rgba(201,160,45,0.07)" },
@@ -32,23 +32,52 @@ function AvatarIcon({ name }) {
   );
 }
 
-export function Leaderboard({ onBack }) {
+function formatTime(seconds) {
+  const safe = Math.max(0, seconds ?? 0);
+  const m = String(Math.floor(safe / 60)).padStart(2, "0");
+  const s = String(safe % 60).padStart(2, "0");
+  return `${m}:${s}`;
+}
+
+export function Leaderboard({ onBack, promoCode }) {
   const [scores, setScores] = useState([]);
+  const [myRankData, setMyRankData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [activeTab, setActiveTab] = useState("GLOBAL");
 
   useEffect(() => {
-    getLeaderboard()
-      .then((data) => {
-        setScores(data.leaderboard || []);
+    setLoading(true);
+    setError("");
+
+    if (activeTab === "GLOBAL") {
+      getLeaderboard()
+        .then((data) => {
+          setScores(data.leaderboard || []);
+          setLoading(false);
+        })
+        .catch((err) => {
+          setError("ARCHIVE ACCESS DENIED: " + err.message);
+          setLoading(false);
+        });
+    } else if (activeTab === "MY RANK") {
+      if (!promoCode) {
+        setMyRankData({ found: false, message: "NO ACTIVE SESSION FOUND. LOGIN REQUIRED." });
         setLoading(false);
-      })
-      .catch((err) => {
-        setError("ARCHIVE ACCESS DENIED: " + err.message);
-        setLoading(false);
-      });
-  }, []);
+        return;
+      }
+
+      getMyRank(promoCode)
+        .then((data) => {
+          setMyRankData(data);
+          setLoading(false);
+        })
+        .catch((err) => {
+          setError("RANK QUERY FAILED: " + err.message);
+          setLoading(false);
+        });
+    }
+  }, [activeTab, promoCode]);
 
   return (
     <div className="lb-screen">
@@ -103,7 +132,7 @@ export function Leaderboard({ onBack }) {
             <p className="lb-subtitle">THE SHARPEST MINDS. THE DEEPEST TRUTHS.</p>
           </div>
           <div className="lb-tabs">
-            {["GLOBAL", "FRIENDS", "MY RANK"].map((tab) => (
+            {["GLOBAL", "MY RANK"].map((tab) => (
               <button
                 key={tab}
                 className={`lb-tab${activeTab === tab ? " lb-tab-active" : ""}`}
@@ -116,85 +145,144 @@ export function Leaderboard({ onBack }) {
           </div>
         </div>
 
-        {/* Table */}
+        {/* Table / My Rank Area */}
         <div className="lb-table-wrap">
-          <table className="lb-table">
-            <thead>
-              <tr className="lb-thead-row">
-                <th className="lb-th lb-th-rank">#</th>
-                <th className="lb-th lb-th-player">PLAYER</th>
-                <th className="lb-th lb-th-prompts">PROMPTS USED</th>
-                <th className="lb-th lb-th-evidence">EVIDENCE</th>
-                <th className="lb-th lb-th-facts">FACTS</th>
-                <th className="lb-th lb-th-score">STRESS</th>
-              </tr>
-            </thead>
-            <tbody>
-              {loading ? (
-                <tr>
-                  <td colSpan="6" className="lb-td-status">
-                    <span className="lb-blink">█</span> ACCESSING ARCHIVES...
-                  </td>
+          {activeTab === "GLOBAL" ? (
+            <table className="lb-table">
+              <thead>
+                <tr className="lb-thead-row">
+                  <th className="lb-th lb-th-rank">#</th>
+                  <th className="lb-th lb-th-player">PROMO CODE</th>
+                  <th className="lb-th lb-th-score">SCORE</th>
+                  <th className="lb-th lb-th-prompts">TIME</th>
+                  <th className="lb-th lb-th-evidence">QUESTIONS</th>
+                  <th className="lb-th lb-th-facts">SOLVED</th>
                 </tr>
-              ) : error ? (
-                <tr>
-                  <td colSpan="6" className="lb-td-status lb-td-error">{error}</td>
-                </tr>
-              ) : scores.length === 0 ? (
-                <tr>
-                  <td colSpan="6" className="lb-td-status">
-                    NO RECORDS ON FILE
-                  </td>
-                </tr>
-              ) : (
-                scores.map((score, index) => {
-                  const medal = MEDALS[index];
-                  const isTopThree = index < 3;
-                  return (
-                    <tr
-                      key={index}
-                      className={`lb-row${isTopThree ? " lb-row-top" : ""}`}
-                      style={medal ? {
-                        background: medal.bg,
-                        borderColor: medal.borderColor,
-                      } : {}}
-                    >
-                      <td className="lb-td lb-td-rank">
-                        <span className="lb-rank-num" style={medal ? { color: medal.color } : {}}>
-                          {index + 1}
-                        </span>
-                        {isTopThree && <TrophyIcon rank={index} />}
-                      </td>
-                      <td className="lb-td lb-td-player">
-                        <AvatarIcon name={score.player_name} />
-                        <span
-                          className="lb-player-name"
+              </thead>
+              <tbody>
+                {loading ? (
+                  <tr>
+                    <td colSpan="6" className="lb-td-status">
+                      <span className="lb-blink">█</span> ACCESSING ARCHIVES...
+                    </td>
+                  </tr>
+                ) : error ? (
+                  <tr>
+                    <td colSpan="6" className="lb-td-status lb-td-error">{error}</td>
+                  </tr>
+                ) : scores.length === 0 ? (
+                  <tr>
+                    <td colSpan="6" className="lb-td-status">
+                      NO RECORDS ON FILE
+                    </td>
+                  </tr>
+                ) : (
+                  scores.map((score, index) => {
+                    const medal = MEDALS[index];
+                    const isTopThree = index < 3;
+                    return (
+                      <tr
+                        key={index}
+                        className={`lb-row${isTopThree ? " lb-row-top" : ""}`}
+                        style={medal ? {
+                          background: medal.bg,
+                          borderColor: medal.borderColor,
+                        } : {}}
+                      >
+                        <td className="lb-td lb-td-rank">
+                          <span className="lb-rank-num" style={medal ? { color: medal.color } : {}}>
+                            {index + 1}
+                          </span>
+                          {isTopThree && <TrophyIcon rank={index} />}
+                        </td>
+                        <td className="lb-td lb-td-player">
+                          <AvatarIcon name={score.promo_code} />
+                          <span
+                            className="lb-player-name"
+                            style={medal ? { color: medal.color } : {}}
+                          >
+                            {score.promo_code}
+                          </span>
+                        </td>
+                        <td
+                          className="lb-td lb-td-score"
                           style={medal ? { color: medal.color } : {}}
                         >
-                          {score.player_name}
-                        </span>
-                      </td>
-                      <td className="lb-td lb-td-center">
-                        {score.turn_count}
-                      </td>
-                      <td className="lb-td lb-td-center">
-                        {score.evidence_count}
-                      </td>
-                      <td className="lb-td lb-td-center">
-                        {score.facts_count}
-                      </td>
-                      <td
-                        className="lb-td lb-td-score"
-                        style={medal ? { color: medal.color } : {}}
-                      >
-                        {score.stress_level}%
-                      </td>
-                    </tr>
-                  );
-                })
+                          {score.score}
+                        </td>
+                        <td className="lb-td lb-td-center">
+                          {formatTime(score.time_taken)}
+                        </td>
+                        <td className="lb-td lb-td-center">
+                          {score.questions_used}
+                        </td>
+                        <td className="lb-td lb-td-center">
+                          {score.solved ? "✅" : "❌"}
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          ) : (
+            /* MY RANK VIEW */
+            <div style={{ padding: "2rem" }}>
+              {loading ? (
+                <div className="lb-td-status">
+                  <span className="lb-blink">█</span> LOCATING DOSSIER...
+                </div>
+              ) : error ? (
+                <div className="lb-td-status lb-td-error">{error}</div>
+              ) : !myRankData?.found ? (
+                <div className="lb-td-status">
+                  {myRankData?.message || "NO RECORD FOUND"}
+                </div>
+              ) : (
+                <div style={{ 
+                  background: "rgba(0,0,0,0.4)", 
+                  border: "1px solid var(--px-terminal-dim)",
+                  borderRadius: "8px",
+                  padding: "2rem",
+                  maxWidth: "500px",
+                  margin: "0 auto",
+                  color: "var(--px-terminal)"
+                }}>
+                  <h2 style={{ 
+                    borderBottom: "1px solid rgba(168,213,154,0.2)", 
+                    paddingBottom: "1rem",
+                    marginBottom: "1.5rem",
+                    textAlign: "center",
+                    letterSpacing: "0.2em"
+                  }}>
+                    MY RANK: {myRankData.promo_code}
+                  </h2>
+                  <div style={{ display: "flex", flexDirection: "column", gap: "1rem", fontSize: "1.1rem" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between" }}>
+                      <span style={{ color: "var(--px-terminal-dim)" }}>RANK</span>
+                      <strong>#{myRankData.rank}</strong>
+                    </div>
+                    <div style={{ display: "flex", justifyContent: "space-between" }}>
+                      <span style={{ color: "var(--px-terminal-dim)" }}>SCORE</span>
+                      <strong>{myRankData.score}</strong>
+                    </div>
+                    <div style={{ display: "flex", justifyContent: "space-between" }}>
+                      <span style={{ color: "var(--px-terminal-dim)" }}>TIME</span>
+                      <strong>{formatTime(myRankData.time_taken)}</strong>
+                    </div>
+                    <div style={{ display: "flex", justifyContent: "space-between" }}>
+                      <span style={{ color: "var(--px-terminal-dim)" }}>QUESTIONS</span>
+                      <strong>{myRankData.questions_used}</strong>
+                    </div>
+                    <div style={{ display: "flex", justifyContent: "space-between" }}>
+                      <span style={{ color: "var(--px-terminal-dim)" }}>SOLVED</span>
+                      <strong>{myRankData.solved ? "✅" : "❌"}</strong>
+                    </div>
+                  </div>
+                </div>
               )}
-            </tbody>
-          </table>
+            </div>
+          )}
         </div>
       </main>
 

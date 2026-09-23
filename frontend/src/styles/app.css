@@ -1968,7 +1968,7 @@ textarea {
 .lb-th-rank { width: 4.5rem; text-align: center; }
 .lb-th-player { min-width: 12rem; }
 .lb-th-prompts, .lb-th-evidence, .lb-th-facts { width: 8rem; text-align: center; }
-.lb-th-score { width: 6rem; text-align: right; padding-right: 1.5rem; }
+.lb-th-score { width: 6rem; text-align: center; }
 
 /* ── Rows ─────────────────────────────────── */
 .lb-row {
@@ -2003,8 +2003,7 @@ textarea {
 .lb-td-center { text-align: center; }
 
 .lb-td-score {
-  text-align: right;
-  padding-right: 1.5rem;
+  text-align: center;
   font-size: 0.9rem;
   font-weight: 700;
   letter-spacing: 0.05em;

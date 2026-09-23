@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { submitScore } from "../api";
+import { useEffect, useState, useRef } from "react";
+import { submitResult } from "../api";
 
 const CASE_SUMMARY = [
   ["SUSPECT", "Adrian Vale"],
@@ -9,13 +9,20 @@ const CASE_SUMMARY = [
   ["MOTIVE", "Victim discovered forensic data manipulation"],
 ];
 
-function formatTimeRemaining(secondsRemaining) {
-  const safe = Math.max(0, secondsRemaining ?? 0);
-  return `${String(Math.floor(safe / 60)).padStart(2, "0")}:${String(safe % 60).padStart(2, "0")}`;
+function formatTime(seconds) {
+  const safe = Math.max(0, seconds ?? 0);
+  const m = String(Math.floor(safe / 60)).padStart(2, "0");
+  const s = String(safe % 60).padStart(2, "0");
+  return `${m}:${s}`;
 }
 
 export function Confession({ session, onRestart, onViewLeaderboard }) {
   const [revealed, setRevealed] = useState(false);
+  const [scoreSubmitted, setScoreSubmitted] = useState(false);
+  const [submitError, setSubmitError] = useState("");
+  const [resultData, setResultData] = useState(null);
+  const submitAttempted = useRef(false);
+
   const confessed = session.status === "CONFESSION";
   const endReason =
     session.status === "OUT_OF_PROMPTS"
@@ -23,42 +30,39 @@ export function Confession({ session, onRestart, onViewLeaderboard }) {
       : session.status === "TIME_EXPIRED"
         ? "10-MINUTE TIME LIMIT REACHED"
         : "INTERROGATION TERMINATED";
+
   const caseSummary = [
     ...CASE_SUMMARY,
-    ["TIME REMAINING", formatTimeRemaining(session.seconds_remaining)],
+    ["TIME REMAINING", formatTime(session.seconds_remaining)],
     ["PROMPTS LEFT", String(session.prompts_left ?? 0).padStart(2, "0")],
   ];
 
-  const [playerName, setPlayerName] = useState("");
-  const [scoreSubmitted, setScoreSubmitted] = useState(false);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [submitError, setSubmitError] = useState("");
-
+  // Reveal animation
   useEffect(() => {
     const id = window.setTimeout(() => setRevealed(true), 1400);
     return () => window.clearTimeout(id);
   }, []);
 
-  const handleScoreSubmit = async (e) => {
-    e.preventDefault();
-    if (!playerName.trim()) return;
-    setIsSubmitting(true);
-    setSubmitError("");
-    try {
-      await submitScore({
-        player_name: playerName.trim(),
-        turn_count: session.turn_count || session.question_count || 0,
-        stress_level: session.stress,
-        evidence_count: session.evidence_found ? session.evidence_found.length : 0,
-        facts_count: session.facts_count || 0,
-      });
-      setScoreSubmitted(true);
-    } catch (err) {
-      setSubmitError(err.message);
-    } finally {
-      setIsSubmitting(false);
+  // Auto-submit result to backend on mount (once only)
+  useEffect(() => {
+    if (submitAttempted.current) return;
+    submitAttempted.current = true;
+
+    const code = session.code || session.session_id;
+    if (!code) {
+      setSubmitError("No promo code found — result not saved.");
+      return;
     }
-  };
+
+    submitResult(code, session.seconds_remaining ?? 0)
+      .then((data) => {
+        setScoreSubmitted(true);
+        setResultData(data);
+      })
+      .catch((err) => {
+        setSubmitError("Failed to save result: " + err.message);
+      });
+  }, [session]);
 
   return (
     <main className="confession-screen" style={{ overflowY: "auto", padding: "2rem 1rem" }}>
@@ -84,34 +88,47 @@ export function Confession({ session, onRestart, onViewLeaderboard }) {
         )}
 
         <p className="confession-meta">
-          SESSION {session.session_id} — FINAL STRESS {session.stress}%
+          SESSION {session.code || session.session_id} — FINAL STRESS {session.stress}%
           {!confessed && " — NO CONFESSION RECORDED"}
         </p>
 
-        {confessed && !scoreSubmitted && (
-          <form onSubmit={handleScoreSubmit} style={{ marginTop: "1rem", padding: "1.5rem", background: "rgba(0,0,0,0.4)", border: "1px solid var(--border-color)", borderRadius: "8px" }}>
-            <h3 style={{ margin: "0 0 1rem 0", color: "var(--text-primary)" }}>SUBMIT REPORT TO COMMAND</h3>
-            <div style={{ display: "flex", gap: "1rem" }}>
-              <input
-                value={playerName}
-                onChange={(e) => setPlayerName(e.target.value)}
-                placeholder="Enter Detective Name"
-                style={{ flex: 1 }}
-                autoComplete="off"
-                required
-              />
-              <button type="submit" disabled={isSubmitting} style={{ width: "auto", padding: "0 1.5rem" }}>
-                {isSubmitting ? "SUBMITTING..." : "SUBMIT SCORE"}
-              </button>
+        {/* Score result feedback */}
+        {scoreSubmitted && resultData && !resultData.duplicate && (
+          <div style={{
+            padding: "1.5rem",
+            background: "rgba(0,0,0,0.4)",
+            border: "1px solid var(--border-color)",
+            borderRadius: "8px",
+            textAlign: "center",
+          }}>
+            <p style={{ color: "var(--color-accent-light)", fontWeight: "bold", margin: "0 0 0.75rem 0" }}>
+              RESULT SUBMITTED TO LEADERBOARD
+            </p>
+            <div style={{ display: "flex", justifyContent: "center", gap: "2rem", flexWrap: "wrap" }}>
+              <span style={{ color: "var(--text-secondary)" }}>
+                SCORE <b style={{ color: "var(--text-primary)" }}>{resultData.score}</b>
+              </span>
+              <span style={{ color: "var(--text-secondary)" }}>
+                TIME <b style={{ color: "var(--text-primary)" }}>{formatTime(resultData.time_taken)}</b>
+              </span>
+              <span style={{ color: "var(--text-secondary)" }}>
+                QUESTIONS <b style={{ color: "var(--text-primary)" }}>{resultData.questions_used}</b>
+              </span>
+              <span style={{ color: "var(--text-secondary)" }}>
+                {resultData.solved ? "✅ SOLVED" : "❌ UNSOLVED"}
+              </span>
             </div>
-            {submitError && <p className="error-text" style={{ marginTop: "0.5rem" }}>{submitError}</p>}
-          </form>
+          </div>
         )}
 
-        {scoreSubmitted && (
-          <p style={{ color: "var(--color-accent-light)", textAlign: "center", marginTop: "1rem", fontWeight: "bold" }}>
-            SCORE SUBMITTED TO LEADERBOARD
+        {scoreSubmitted && resultData && resultData.duplicate && (
+          <p style={{ color: "var(--text-secondary)", textAlign: "center", marginTop: "0.5rem" }}>
+            Result already recorded.
           </p>
+        )}
+
+        {submitError && (
+          <p className="error-text" style={{ textAlign: "center" }}>{submitError}</p>
         )}
 
         <div style={{ display: "flex", gap: "1rem", justifyContent: "center", marginTop: "2rem" }}>

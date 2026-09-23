@@ -10,13 +10,21 @@ import "./styles/app.css";
 export default function App() {
   const [session, setSession] = useState(null);
   const [viewLeaderboard, setViewLeaderboard] = useState(false);
+  const [promoCode, setPromoCode] = useState(null);
+
+  const handleStart = (newSession) => {
+    setSession(newSession);
+    if (newSession && (newSession.code || newSession.session_id)) {
+      setPromoCode(newSession.code || newSession.session_id);
+    }
+  };
 
   if (viewLeaderboard) {
-    return <Leaderboard onBack={() => setViewLeaderboard(false)} />;
+    return <Leaderboard promoCode={promoCode} onBack={() => setViewLeaderboard(false)} />;
   }
 
   if (!session) {
-    return <Start onStarted={setSession} onViewLeaderboard={() => setViewLeaderboard(true)} />;
+    return <Start onStarted={handleStart} onViewLeaderboard={() => setViewLeaderboard(true)} />;
   }
 
   const isConfession = session.status === "CONFESSION";
