@@ -3,7 +3,6 @@ import { askQuestion } from "../api";
 import { RoomStage } from "../components/RoomStage";
 import { StressGauge } from "../components/StressGauge";
 import { Timer } from "../components/Timer";
-import { EvidencePanel } from "../components/EvidencePanel";
 import { EvidenceFolder } from "../components/evidence/EvidenceFolder";
 import { ActionBar } from "../components/ActionBar";
 import { DeskEvidenceStack } from "../components/DeskEvidenceStack";
@@ -36,7 +35,6 @@ export function Interrogation({ session, onStatusChange }) {
   const [secondsRemaining, setSecondsRemaining] = useState(ROUND_SECONDS);
   const [promptsLeft, setPromptsLeft] = useState(session.prompts_left ?? MAX_PROMPTS_FALLBACK);
   const [activeAction, setActiveAction] = useState("ask");
-  const [showEvidenceList, setShowEvidenceList] = useState(false);
   // const [tune, setTune] = useState(DEFAULT_TUNE);   // TUNER
   // EVIDENCE TUNER: const [evidenceTune, setEvidenceTune] = useState({
   //   left: 7, bottom: 0, folderWidth: 17, folderHeight: 24, rotate: -7,
@@ -232,7 +230,7 @@ export function Interrogation({ session, onStatusChange }) {
       <DeskEvidenceStack
         evidenceFound={evidenceFound}
         onOpen={setOpenEvidence}
-        onOpenAll={() => setShowEvidenceList((open) => !open)}
+        onOpenAll={() => setOpenEvidence("suspect_dossier")}
       />
       {/* EVIDENCE TUNER: <EvidenceTuner values={evidenceTune} onChange={setEvidenceTune} /> */}
 
@@ -242,12 +240,6 @@ export function Interrogation({ session, onStatusChange }) {
       <div className="hud-desk-sheet">
         <ActionBar active={activeAction} onSelect={handleAction} disabled={sending} />
       </div>
-
-      {showEvidenceList && (
-        <div className="hud-panel hud-evidence">
-          <EvidencePanel evidenceFound={evidenceFound} onSelect={setOpenEvidence} />
-        </div>
-      )}
 
       {activeAction === "accuse" && (
         <section className="hud-panel hud-action-panel">
@@ -311,7 +303,14 @@ export function Interrogation({ session, onStatusChange }) {
       </footer>
 
       {openEvidence && (
-        <EvidenceFolder evidenceId={openEvidence} onClose={() => setOpenEvidence(null)} onPresent={handlePresentEvidence} presenting={sending} />
+        <EvidenceFolder
+          evidenceId={openEvidence}
+          evidenceFound={evidenceFound}
+          onSelect={setOpenEvidence}
+          onClose={() => setOpenEvidence(null)}
+          onPresent={handlePresentEvidence}
+          presenting={sending}
+        />
       )}
 
       {showDanielFile && (

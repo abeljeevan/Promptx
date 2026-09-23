@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { Fragment, useEffect } from "react";
 import { EVIDENCE_CONTENT, EVIDENCE_PHOTOS, SUSPECT_PROFILE } from "../../data/evidenceContent";
 import { WitnessStatementDoc } from "./WitnessStatementDoc";
 import { FingerprintDoc } from "./FingerprintDoc";
@@ -74,7 +74,33 @@ function PhotoDoc({ photo }) {
   );
 }
 
-export function EvidenceFolder({ evidenceId, onClose, onPresent, presenting }) {
+// Tabs across the top of the folder: the dossier is always available, the rest
+// appear as the interrogation uncovers them.
+function EvidenceTabs({ activeId, evidenceFound, onSelect }) {
+  const ids = ["suspect_dossier", ...evidenceFound.filter((id) => id !== "suspect_dossier")];
+  const tabs = ids
+    .map((id) => ({ id, item: EVIDENCE_CONTENT[id] ?? EVIDENCE_PHOTOS[id] }))
+    .filter(({ item }) => item);
+  if (tabs.length < 2) return null;
+
+  return (
+    <nav className="evidence-tabs" aria-label="Case evidence">
+      {tabs.map(({ id, item }) => (
+        <button
+          key={id}
+          type="button"
+          className={`evidence-tab${id === activeId ? " evidence-tab-active" : ""}`}
+          aria-current={id === activeId ? "true" : undefined}
+          onClick={() => onSelect(id)}
+        >
+          {id === "suspect_dossier" ? "DOSSIER" : item.title}
+        </button>
+      ))}
+    </nav>
+  );
+}
+
+export function EvidenceFolder({ evidenceId, evidenceFound = [], onSelect, onClose, onPresent, presenting }) {
   useEffect(() => {
     const onKey = (event) => {
       if (event.key === "Escape") onClose();
@@ -99,26 +125,32 @@ export function EvidenceFolder({ evidenceId, onClose, onPresent, presenting }) {
       onClick={onClose}
     >
       <article className="evidence-folder" onClick={(event) => event.stopPropagation()}>
-        <header className="doc-head">
-          <div className="doc-head-top">
-            <div>
-              <h3><PopText text={header?.title || "SUSPECT DOSSIER"} speed={20} /></h3>
-              <span className="doc-ref">{header?.reference || "DOSSIER / CASE-VALE-01"}</span>
-            </div>
-            <div className="suspect-mini-badge">
-              <img src={SUSPECT_PROFILE.photo} alt="Suspect" className="suspect-head-thumb" />
-            </div>
-          </div>
-          <span className="doc-stamp">EVIDENCE</span>
-        </header>
-
-        {isDossier ? (
-          <SuspectDossierDoc />
-        ) : textContent ? (
-          <RecordDoc content={textContent} />
-        ) : (
-          <PhotoDoc photo={photoContent} />
+        {onSelect && (
+          <EvidenceTabs activeId={evidenceId} evidenceFound={evidenceFound} onSelect={onSelect} />
         )}
+        {/* key restarts the typewriter text when switching tabs */}
+        <Fragment key={evidenceId}>
+          <header className="doc-head">
+            <div className="doc-head-top">
+              <div>
+                <h3><PopText text={header?.title || "SUSPECT DOSSIER"} speed={20} /></h3>
+                <span className="doc-ref">{header?.reference || "DOSSIER / CASE-VALE-01"}</span>
+              </div>
+              <div className="suspect-mini-badge">
+                <img src={SUSPECT_PROFILE.photo} alt="Suspect" className="suspect-head-thumb" />
+              </div>
+            </div>
+            <span className="doc-stamp">EVIDENCE</span>
+          </header>
+
+          {isDossier ? (
+            <SuspectDossierDoc />
+          ) : textContent ? (
+            <RecordDoc content={textContent} />
+          ) : (
+            <PhotoDoc photo={photoContent} />
+          )}
+        </Fragment>
 
         <footer className="evidence-actions">
           {!isDossier && (

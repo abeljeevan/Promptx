@@ -1559,6 +1559,10 @@ textarea {
 .evidence-actions button:hover, .evidence-actions button:focus-visible { background: #3a3021; color: #e4d4ae; outline: 1px solid var(--px-terminal); outline-offset: 2px; }
 .evidence-actions .evidence-present { background: #4a3027; color: #e8d8b2; border-color: #6b2922; }
 .evidence-actions .doc-close { margin: 0; width: auto; }
+.evidence-tabs { position: relative; display: flex; flex-wrap: wrap; gap: .35rem; margin-bottom: 1rem; padding-bottom: .75rem; border-bottom: 1px dashed rgb(74 58 38 / 45%); }
+.evidence-tab { border: 1px solid #4e402c; background: transparent; color: #302719; cursor: pointer; letter-spacing: .08em; font-size: .6rem; padding: .35rem .6rem; }
+.evidence-tab:hover, .evidence-tab:focus-visible { background: #3a3021; color: #e4d4ae; outline: 1px solid var(--px-terminal); outline-offset: 2px; }
+.evidence-tab-active { background: #302719; color: #e4d4ae; }
 
 @media (max-width: 900px) {
   .desk-evidence { display: none; }
@@ -2099,6 +2103,95 @@ textarea {
   color: var(--px-terminal-dim);
   opacity: 0.6;
   white-space: nowrap;
+}
+
+/* Next case title card: the Silent Witness poster fades up from black, then PLAY. */
+
+.next-case-intro {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: #000;
+  overflow: hidden;
+}
+
+.next-case-intro-frame {
+  position: relative;
+  width: min(100vw, 150vh);
+  aspect-ratio: 3 / 2;
+}
+
+.next-case-intro-image {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  animation: next-case-fade-in 3.2s cubic-bezier(0.3, 0, 0.2, 1) both;
+}
+
+/* Sits in the empty strip left of the poster's "A door. Five shadows." tagline,
+   below the suspect cards. Sized in poster percentages so it stays in that gap. */
+.next-case-play {
+  position: absolute;
+  left: 17%;
+  width: 17%;
+  bottom: 2%;
+  height: 6.2%;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  font: inherit;
+  font-family: var(--px-mono);
+  /* ~2.2% of the poster width */
+  font-size: calc(min(100vw, 150vh) * 0.022);
+  font-weight: 700;
+  white-space: nowrap;
+  letter-spacing: 0.22em;
+  color: #f1e3c4;
+  background: rgb(20 8 6 / 82%);
+  border: 2px solid var(--px-warning);
+  box-shadow: 0 0 0 1px rgb(0 0 0 / 60%), 0 1rem 3rem rgb(0 0 0 / 70%);
+  cursor: pointer;
+  animation:
+    next-case-play-in 900ms ease-out 2.6s both,
+    next-case-play-pulse 2.4s ease-in-out 3.5s infinite;
+}
+
+.next-case-play:hover,
+.next-case-play:focus-visible {
+  background: var(--px-warning);
+  color: #fff;
+  outline: 2px solid #f1e3c4;
+  outline-offset: 4px;
+}
+
+@keyframes next-case-fade-in {
+  0% { opacity: 0; transform: scale(1.08); filter: brightness(0.15) blur(3px); }
+  60% { opacity: 1; filter: brightness(0.7) blur(0); }
+  100% { opacity: 1; transform: scale(1); filter: brightness(1); }
+}
+
+@keyframes next-case-play-in {
+  from { opacity: 0; transform: translateY(1rem); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes next-case-play-pulse {
+  0%, 100% { box-shadow: 0 0 0 1px rgb(0 0 0 / 60%), 0 1rem 3rem rgb(0 0 0 / 70%); }
+  50% { box-shadow: 0 0 0 1px rgb(0 0 0 / 60%), 0 0 2.5rem rgb(159 48 41 / 75%); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .next-case-intro-image,
+  .next-case-play { animation: none; }
+}
+
+.lb-footer-actions {
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  justify-content: center;
 }
 
 .lb-back-btn {

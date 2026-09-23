@@ -12,15 +12,11 @@ type InteractiveInvestigationObjectProps = {
   className?: string;
   mask?: string;
   sceneImage?: string;
-  cycle?: string;
-  delay?: string;
   children?: ReactNode;
 };
 
 type InvestigationStyle = CSSProperties & {
   "--object-mask"?: string;
-  "--idle-cycle"?: string;
-  "--idle-delay"?: string;
 };
 
 export function InteractiveInvestigationObject({
@@ -32,16 +28,10 @@ export function InteractiveInvestigationObject({
   className,
   mask,
   sceneImage,
-  cycle = "4s",
-  delay = "0s",
   children,
 }: InteractiveInvestigationObjectProps) {
   const isActive = activeId === id;
-  const style: InvestigationStyle = {
-    "--idle-cycle": cycle,
-    "--idle-delay": delay,
-    ...(mask ? { "--object-mask": mask } : {}),
-  };
+  const style: InvestigationStyle = mask ? { "--object-mask": mask } : {};
 
   return (
     <Button

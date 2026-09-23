@@ -39,7 +39,7 @@ function formatTime(seconds) {
   return `${m}:${s}`;
 }
 
-export function Leaderboard({ onBack, promoCode }) {
+export function Leaderboard({ onBack, onNextCase, promoCode }) {
   const [scores, setScores] = useState([]);
   const [myRankData, setMyRankData] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -282,9 +282,16 @@ export function Leaderboard({ onBack, promoCode }) {
       {/* Bottom back button */}
       <div className="lb-footer">
         <span className="lb-footer-left">PROMPT X — TRUTH ALWAYS SURFACES</span>
-        <button type="button" className="lb-back-btn" onClick={onBack}>
-          ◀ BACK TO CASE
-        </button>
+        <div className="lb-footer-actions">
+          <button type="button" className="lb-back-btn" onClick={onBack}>
+            ◀ BACK TO CASE
+          </button>
+          {onNextCase && (
+            <button type="button" className="lb-back-btn" onClick={onNextCase}>
+              NEXT CASE ▶
+            </button>
+          )}
+        </div>
         <span className="lb-footer-right">SUB-BASEMENT INTERROGATION ROOM | CASE-SILENT-01</span>
       </div>
     </div>

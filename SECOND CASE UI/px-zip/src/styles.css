@@ -153,7 +153,9 @@ button, input { font: inherit; }
 }
 .investigation-object { position: absolute; z-index: 4; height: auto; padding: 0; border: 0; border-radius: 0; outline: 0; background: transparent; box-shadow: none; overflow: visible; cursor: crosshair; transition: filter .22s ease, opacity .25s ease; }
 .investigation-object:hover, .investigation-object:focus-visible { background: transparent; }
-.investigation-object__breath { position: absolute; inset: 0; display: block; clip-path: var(--object-mask); animation: suspect-breathe var(--idle-cycle) ease-in-out var(--idle-delay) infinite; transform-origin: 50% 82%; will-change: transform; transition: filter .22s ease; }
+/* Suspects hold still: the old idle "breathing" moved a cut-out of the room
+   photo against the same photo behind it, which read as shaking. */
+.investigation-object__breath { position: absolute; inset: 0; display: block; clip-path: var(--object-mask); transition: filter .22s ease; }
 .investigation-object__breath img { position: absolute; display: block; max-width: none; pointer-events: none; user-select: none; }
 /* Outline-only hover glow: the layer itself stays essentially invisible
    (alpha ~0.02, just enough for drop-shadow to have something to trace);
@@ -169,20 +171,40 @@ button, input { font: inherit; }
 .suspect-elias { left: 42%; width: 16%; }.suspect-elias .investigation-object__breath img { width: 625%; height: 196.08%; left: -262.5%; top: -45.1%; }
 .suspect-leena { left: 62%; width: 14%; }.suspect-leena .investigation-object__breath img { width: 714.29%; height: 196.08%; left: -442.86%; top: -45.1%; }
 .suspect-ave { left: 84%; width: 14%; }.suspect-ave .investigation-object__breath img { width: 714.29%; height: 196.08%; left: -600%; top: -45.1%; }
+/* Both files are real PNG cut-outs lying on the table, dimmed to the room's
+   light. drop-shadow traces their alpha, so the hover glow hugs the paper
+   exactly — the generic clip-path scan layer is not needed for them. */
 .table-prop { z-index: 6; cursor: zoom-in; transform-origin: 50% 80%; }
-.table-prop--victim { left: 72.5%; top: 65%; width: 9.5%; aspect-ratio: 4 / 3; transform: rotate(5deg) skewX(-4deg); filter: brightness(.78) sepia(.1); transition: filter .25s ease; }
-.table-prop--victim > img { width: 100%; height: 100%; object-fit: contain; pointer-events: none; transition: filter .25s ease; }
-.table-prop--victim[data-active="true"] { filter: brightness(1.05) sepia(.04); }
-/* victim-file-prop.png has real alpha, so drop-shadow traces its exact
-   silhouette (folder + peeking photo corner) — no clip-path mask needed. */
-.table-prop--victim[data-active="true"] > img { filter: drop-shadow(0 0 2px rgba(255, 255, 255, .95)) drop-shadow(0 0 7px rgba(255, 255, 255, .65)) drop-shadow(0 0 15px rgba(255, 255, 255, .4)); animation: glow-breathe 2.4s ease-in-out infinite; }
-/* the real PNG alpha (above) already gives a pixel-perfect glow, so the
-   generic clip-path-mask scan layer (only an approximate polygon here) is
-   redundant and would double up the outline — suppress it for this prop. */
-.table-prop--victim .investigation-object__scan { display: none; }
-.table-prop--evidence { left: 16%; top: 61%; width: 14.5%; height: 13.5%; transform: rotate(-3deg); }
-.table-prop--evidence .investigation-object__breath { animation: none; }
-.table-prop--evidence .investigation-object__breath img { width: 689.66%; height: 740.75%; left: -110.35%; top: -451.85%; }
+.table-prop > img { display: block; width: 100%; height: 100%; object-fit: contain; pointer-events: none; filter: drop-shadow(0 .5rem .45rem rgb(0 0 0 / 55%)); transition: filter .25s ease; }
+.table-prop .investigation-object__scan { display: none; }
+.table-prop[data-active="true"] > img { filter: drop-shadow(0 0 2px rgba(255, 255, 255, .95)) drop-shadow(0 0 7px rgba(255, 255, 255, .65)) drop-shadow(0 0 15px rgba(255, 255, 255, .4)); animation: glow-breathe 2.4s ease-in-out infinite; }
+.table-prop:focus-visible > img { filter: drop-shadow(0 0 2px rgba(255, 255, 255, .95)) drop-shadow(0 0 7px rgba(255, 255, 255, .65)); }
+/* Victim file: on the open marble at the left end of the table, beside the
+   evidence stack, instead of floating by the mug. */
+.table-prop--victim { left: 8%; top: 61.5%; width: 8.2%; aspect-ratio: 4 / 3; transform: rotate(-9deg); filter: brightness(.82) sepia(.12); transition: filter .25s ease, transform .25s ease; }
+.table-prop--victim[data-active="true"], .table-prop--victim:focus-visible { filter: brightness(1.02) sepia(.04); transform: rotate(-9deg) translateY(-4%); }
+/* Evidence stack: Adrian's case prop, laid over the stack painted into the
+   room and tipped back so it sits flat on the table like the original. */
+.table-prop--evidence { left: 15.8%; top: 53.5%; width: 19%; aspect-ratio: 610 / 439; transform-origin: 50% 35%; transform: perspective(900px) rotateX(50deg) rotate(-4deg); filter: brightness(.72) sepia(.18) saturate(.9); transition: filter .25s ease; }
+.table-prop--evidence[data-active="true"], .table-prop--evidence:focus-visible { filter: brightness(.98) sepia(.06); }
+
+/* Pin + label over each file, matching the ◉ NAME markers above the suspects. */
+.table-marker { position: absolute; z-index: 7; display: grid; justify-items: center; gap: .1rem; transform: translateX(-50%); pointer-events: none; text-align: center; color: var(--case-bright); text-shadow: 0 1px 4px var(--case-void), 0 0 10px var(--case-void); transition: opacity .2s ease; }
+.table-marker i { width: .95rem; height: .95rem; border: 2px solid var(--case-green); border-radius: 50%; box-shadow: 0 0 10px var(--case-glow); background: radial-gradient(circle, var(--case-green) 0 28%, transparent 34%); animation: marker-ping 2.2s ease-out infinite; }
+.table-marker b { font-size: clamp(.5rem, .78vw, .72rem); letter-spacing: .14em; font-weight: 600; white-space: nowrap; }
+.table-marker small { font-size: clamp(.42rem, .6vw, .56rem); letter-spacing: .16em; color: var(--case-green); white-space: nowrap; }
+.table-marker--active b { color: #fff; }
+.table-marker--victim { left: 11.8%; top: 52.5%; }
+.table-marker--evidence { left: 25.5%; top: 49.5%; }
+@keyframes marker-ping { 0% { box-shadow: 0 0 0 0 var(--case-glow); } 70%, 100% { box-shadow: 0 0 0 .6rem transparent; } }
+
+/* Hover photo card: the suspect's portrait rises above their seat. */
+.suspect-card { position: absolute; z-index: 9; top: 10%; width: 10.5%; margin: 0; padding: .45rem .45rem .5rem; background: #d9ccb0; box-shadow: 0 1.2rem 2.4rem rgb(0 0 0 / 70%); transform: translate(-50%, 1.2rem) rotate(-2deg); opacity: 0; pointer-events: none; transition: opacity .22s ease, transform .28s cubic-bezier(.2, .8, .2, 1); }
+.suspect-card--visible { opacity: 1; transform: translate(-50%, 0) rotate(-2deg); }
+.suspect-card img { display: block; width: 100%; aspect-ratio: 1; object-fit: cover; object-position: top center; filter: sepia(.28) contrast(1.06) brightness(.94); }
+.suspect-card figcaption { display: grid; gap: .1rem; margin-top: .4rem; color: #2a231a; text-align: center; }
+.suspect-card figcaption b { font-size: clamp(.5rem, .8vw, .74rem); letter-spacing: .1em; }
+.suspect-card figcaption span { font-size: clamp(.42rem, .6vw, .56rem); letter-spacing: .14em; color: #6b5a3e; }
 .evidence-hit { position: absolute; z-index: 5; bottom: 4.4%; height: 13.2%; border: 1px solid transparent; background: transparent; cursor: zoom-in; }
 .evidence-hit:hover { border-color: var(--case-green); background: color-mix(in oklab, var(--case-green) 8%, transparent); }
 .modal-backdrop { position: fixed; inset: 0; z-index: 20; display: grid; place-items: center; padding: 2rem; background: color-mix(in oklab, var(--case-void) 82%, transparent); backdrop-filter: blur(8px); }
@@ -254,10 +276,54 @@ button, input { font: inherit; }
 .confession-meta { margin: .2rem 0 .6rem; font-size: .68rem; color: var(--case-muted); letter-spacing: .1em; }
 .sw-hud-time-critical { color: var(--case-alert) !important; }
 
+/* Suspect photo beside their name in the interrogation panel. */
+.interrogation-id { display: flex; align-items: center; gap: .8rem; }
+.interrogation-photo { width: 3.6rem; height: 3.6rem; object-fit: cover; object-position: top center; border: 1px solid var(--case-line); filter: sepia(.25) contrast(1.05); flex-shrink: 0; }
+
+/* End-of-case score: Adrian's points carried over + this case = total. */
+.score-card { width: min(92vw, 640px); margin: .2rem 0 .4rem; padding: 1rem 1.2rem; border: 1px solid var(--case-line); background: color-mix(in oklab, var(--case-panel) 90%, transparent); }
+.score-card-totals { display: flex; align-items: center; justify-content: center; gap: .9rem; flex-wrap: wrap; }
+.score-card-totals > div { display: grid; gap: .25rem; min-width: 7.5rem; }
+.score-card-totals span { font-size: .58rem; letter-spacing: .14em; color: var(--case-muted); }
+.score-card-totals b { font-size: 1.9rem; color: var(--case-bright); font-variant-numeric: tabular-nums; }
+.score-card-totals > i { font-style: normal; color: var(--case-muted); font-size: 1.2rem; }
+.score-card-total b { color: var(--case-green); text-shadow: 0 0 14px var(--case-glow); }
+.score-card-breakdown { display: grid; grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr)); gap: .3rem 1.2rem; margin: .9rem 0 0; padding: .8rem 0 0; border-top: 1px solid var(--case-line); list-style: none; }
+.score-card-breakdown li { display: flex; justify-content: space-between; font-size: .66rem; letter-spacing: .08em; color: var(--case-muted); }
+.score-card-breakdown b { color: var(--case-bright); font-variant-numeric: tabular-nums; }
+.score-card-note { margin: .7rem 0 0; font-size: .64rem; color: var(--case-warm); }
+.score-card-error { color: var(--case-alert); font-size: .72rem; }
+.score-card-error button { margin-left: .5rem; border: 1px solid var(--case-alert); background: transparent; color: var(--case-alert); cursor: pointer; }
+.confession-actions { display: flex; gap: .8rem; flex-wrap: wrap; justify-content: center; }
+
+/* Combined leaderboard. */
+.leaderboard-backdrop { z-index: 40; }
+.leaderboard-view { width: min(94vw, 760px); max-height: 88vh; overflow-y: auto; display: grid; gap: 1rem; padding: 1.4rem; border: 1px solid var(--case-line); background: color-mix(in oklab, var(--case-panel) 97%, transparent); box-shadow: 0 28px 90px var(--case-void); animation: case-in .25s ease-out; }
+.leaderboard-view header { display: flex; justify-content: space-between; align-items: flex-start; }
+.leaderboard-view header small { color: var(--case-green); font-size: .62rem; letter-spacing: .12em; }
+.leaderboard-view h2 { margin: .35rem 0 0; color: var(--case-bright); font-size: 1.6rem; letter-spacing: .18em; }
+.leaderboard-table { width: 100%; border-collapse: collapse; font-size: .74rem; font-variant-numeric: tabular-nums; }
+.leaderboard-table th { padding: .45rem .5rem; text-align: left; font-size: .58rem; letter-spacing: .14em; font-weight: 400; color: var(--case-green); border-bottom: 1px solid var(--case-line); }
+.leaderboard-table td { padding: .55rem .5rem; color: var(--case-text); border-bottom: 1px solid color-mix(in oklab, var(--case-line) 45%, transparent); }
+.leaderboard-table td b { color: var(--case-bright); }
+.leaderboard-table tr.leaderboard-me td { background: color-mix(in oklab, var(--case-green) 12%, transparent); color: var(--case-bright); }
+.leaderboard-empty, .leaderboard-rank { margin: 0; font-size: .74rem; letter-spacing: .1em; color: var(--case-muted); }
+.leaderboard-rank b { color: var(--case-green); }
+.leaderboard-view > .terminal-button { justify-self: start; }
+
+/* Participant code prompt for players who open this case directly. */
+.code-gate { position: fixed; inset: 0; z-index: 50; display: grid; place-items: center; padding: 1.5rem; background: color-mix(in oklab, var(--case-void) 88%, transparent); backdrop-filter: blur(6px); }
+.code-gate form { width: min(92vw, 440px); display: grid; gap: .8rem; padding: 1.6rem; border: 1px solid var(--case-line); background: var(--case-panel); }
+.code-gate small { color: var(--case-green); font-size: .62rem; letter-spacing: .12em; }
+.code-gate h2 { margin: 0; color: var(--case-bright); font-size: 1.1rem; letter-spacing: .12em; }
+.code-gate p { margin: 0; color: var(--case-muted); font-size: .72rem; line-height: 1.6; }
+.code-gate input { padding: .75rem; border: 1px solid var(--case-line); background: var(--case-void); color: var(--case-bright); outline: 0; letter-spacing: .12em; }
+.code-gate input:focus { border-color: var(--case-green); }
+.code-gate .terminal-button { justify-content: center; }
+
 @keyframes panel-in { from { opacity: 0; transform: translateX(30px); } to { opacity: 1; transform: translateX(0); } }
 @keyframes case-in { from { opacity: 0; transform: scale(.97); } to { opacity: 1; transform: scale(1); } }
 @keyframes file-expand { from { opacity: 0; transform: translateY(16%) scale(.42) rotate(-4deg); } to { opacity: 1; transform: translateY(0) scale(1) rotate(0); } }
-@keyframes suspect-breathe { 0%,100% { transform: translateY(0) scale(1); } 42% { transform: translateY(-.22%) scaleX(1.0015) scaleY(1.003); } 68% { transform: translateY(.08%) rotate(.08deg) scale(1); } }
 @keyframes glow-breathe { 0%,100% { filter: drop-shadow(0 0 2px rgba(255,255,255,.9)) drop-shadow(0 0 7px rgba(255,255,255,.6)) drop-shadow(0 0 16px rgba(255,255,255,.32)); } 50% { filter: drop-shadow(0 0 2px rgba(255,255,255,1)) drop-shadow(0 0 10px rgba(255,255,255,.75)) drop-shadow(0 0 22px rgba(255,255,255,.45)); } }
 
 /* API error panel inside interrogation sidebar */

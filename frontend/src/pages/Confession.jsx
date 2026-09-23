@@ -9,9 +9,6 @@ const CASE_SUMMARY = [
   ["MOTIVE", "Victim discovered forensic data manipulation"],
 ];
 
-// Dev default port for the "The Silent Witness" frontend (SECOND CASE UI/px-zip).
-const SILENT_WITNESS_URL = "http://localhost:8080";
-
 function formatTime(seconds) {
   const safe = Math.max(0, seconds ?? 0);
   const m = String(Math.floor(safe / 60)).padStart(2, "0");
@@ -19,12 +16,13 @@ function formatTime(seconds) {
   return `${m}:${s}`;
 }
 
-export function Confession({ session, onRestart, onViewLeaderboard }) {
+export function Confession({ session, result, onResult, onRestart, onNextCase, onViewLeaderboard }) {
   const [revealed, setRevealed] = useState(false);
-  const [scoreSubmitted, setScoreSubmitted] = useState(false);
   const [submitError, setSubmitError] = useState("");
-  const [resultData, setResultData] = useState(null);
-  const submitAttempted = useRef(false);
+  // The result lives in App so it survives a visit to the leaderboard.
+  const resultData = result;
+  const scoreSubmitted = Boolean(result);
+  const submitAttempted = useRef(Boolean(result));
 
   const confessed = session.status === "CONFESSION";
   const endReason =
@@ -59,13 +57,12 @@ export function Confession({ session, onRestart, onViewLeaderboard }) {
 
     submitResult(code, session.seconds_remaining ?? 0)
       .then((data) => {
-        setScoreSubmitted(true);
-        setResultData(data);
+        onResult(data);
       })
       .catch((err) => {
         setSubmitError("Failed to save result: " + err.message);
       });
-  }, [session]);
+  }, [session, onResult]);
 
   return (
     <main className="confession-screen" style={{ overflowY: "auto", padding: "2rem 1rem" }}>
@@ -135,21 +132,17 @@ export function Confession({ session, onRestart, onViewLeaderboard }) {
         )}
 
         <div style={{ display: "flex", gap: "1rem", justifyContent: "center", marginTop: "2rem", flexWrap: "wrap" }}>
-          {confessed && (
-            <button
-              type="button"
-              className="new-case-button"
-              onClick={() => {
-                window.location.href = SILENT_WITNESS_URL;
-              }}
-            >
+          {/* A solved case moves on to The Silent Witness; an unresolved one
+              can only be retried. */}
+          {confessed ? (
+            <button type="button" className="new-case-button" onClick={onNextCase}>
               NEXT CASE
             </button>
+          ) : (
+            <button type="button" className="new-case-button" onClick={onRestart}>
+              OPEN NEW CASE
+            </button>
           )}
-
-          <button type="button" className="new-case-button" onClick={onRestart}>
-            OPEN NEW CASE
-          </button>
 
           <button
             type="button"

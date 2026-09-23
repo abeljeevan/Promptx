@@ -7,14 +7,20 @@ memory belong to each suspect.
 Each suspect is assigned their own Gemini API key so that character isolation
 is enforced at the API level as well as the prompt level.
 
+Every player gets their own case, keyed by the participant code from Adrian's
+case (sent as the X-Player-Code header). Finished cases are scored here and
+written to the shared leaderboard.db, so the leaderboard can add both cases up.
+
 NOTE: Run with plain uvicorn (no reload=True) to avoid ghost reloader processes.
 """
 
 from __future__ import annotations
 
 import asyncio
+import datetime
 import json
 import os
+import sqlite3
 import ssl
 import time
 from dataclasses import dataclass, field
@@ -24,7 +30,7 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
-from fastapi import FastAPI, HTTPException
+from fastapi import Depends, FastAPI, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
@@ -46,6 +52,13 @@ ROOT_ENV = CASE_DIR.parent / ".env"
 MODEL = "gemini-3.6-flash"
 GEMINI_HOST = "generativelanguage.googleapis.com"
 MAX_QUESTIONS_PER_SUSPECT = 10
+ROUND_SECONDS = 20 * 60  # matches the frontend's 20-minute round
+
+# Shared with Adrian's case (server.py). Its results are stored under the case id
+# "silent_witness" — a historical name that actually means Adrian's case.
+DB_PATH = CASE_DIR.parent / "leaderboard.db"
+CASE1_ID = "silent_witness"
+CASE2_ID = "silent_witness_door"
 
 
 def _load_env_file() -> dict[str, str]:
@@ -119,9 +132,36 @@ class CaseState:
     proven_facts: set[str] = field(default_factory=set)
     suspects: dict[str, SuspectState] = field(default_factory=lambda: {key: SuspectState() for key in SUSPECTS})
     solved: bool = False
+    started_at: float = field(default_factory=time.time)
+    # Evidence the player had actually uncovered when the case closed. The
+    # confession reveals everything, so scoring must not count that.
+    evidence_at_solve: set[str] | None = None
+    result_submitted: bool = False
+
+    def mark_solved(self) -> None:
+        if self.evidence_at_solve is None:
+            self.evidence_at_solve = set(self.revealed_evidence)
+        self.solved = True
+
+    def seconds_remaining(self) -> int:
+        return max(0, ROUND_SECONDS - int(time.time() - self.started_at))
 
 
-state = CaseState()
+# One case per participant code. Requests without a code share a local case,
+# which keeps the API usable from curl and older frontends.
+LOCAL_PLAYER = "__LOCAL__"
+cases: dict[str, CaseState] = {}
+
+
+def player_key(x_player_code: str | None = Header(default=None)) -> str:
+    code = (x_player_code or "").strip()
+    return code.upper() if code else LOCAL_PLAYER
+
+
+def current_case(key: str = Depends(player_key)) -> CaseState:
+    if key not in cases:
+        cases[key] = CaseState()
+    return cases[key]
 
 
 # ---------------------------------------------------------------------------
@@ -164,7 +204,7 @@ def stress_state(stress: int) -> str:
     return "BREAKING"
 
 
-def public_suspect(suspect_id: str) -> dict[str, Any]:
+def public_suspect(state: CaseState, suspect_id: str) -> dict[str, Any]:
     profile = SUSPECTS[suspect_id]
     suspect = state.suspects[suspect_id]
     return {
@@ -181,15 +221,19 @@ def public_suspect(suspect_id: str) -> dict[str, Any]:
     }
 
 
-def case_progress() -> dict[str, Any]:
-    facts = state.proven_facts
-    milestones = {
+def case_milestones(facts: set[str]) -> dict[str, bool]:
+    return {
         "timeline":               "transmission_not_recording" in facts,
         "digital_access":         "noah_account_authenticated" in facts,
         "camera_blackout":        "blackout_is_system_level" in facts,
         "dataset_motive":         "data_manipulation_motive" in facts,
         "critical_contradiction": {"maintenance_session_requires_presence", "noah_account_authenticated", "movement_conflicts_with_alibi"}.issubset(facts),
     }
+
+
+def case_progress(state: CaseState) -> dict[str, Any]:
+    facts = state.proven_facts
+    milestones = case_milestones(facts)
     proof_ready = all(milestones.values()) and "token_created_ambiguity" in facts
     return {
         "revealed_evidence": sorted(state.revealed_evidence),
@@ -265,7 +309,7 @@ def fallback_reply(suspect_id: str, facts: set[str]) -> str:
     return replies.get(suspect_id, "I have nothing more to say right now.")
 
 
-def build_prompt(suspect_id: str, question: str, newly_revealed: set[str]) -> str:
+def build_prompt(state: CaseState, suspect_id: str, question: str, newly_revealed: set[str]) -> str:
     suspect = state.suspects[suspect_id]
     recent = "\n".join(
         f"Investigator: {item['question']}\nYou: {item['reply']}"
@@ -331,7 +375,7 @@ def _call_gemini_http(prompt: str, api_key: str) -> str:
     raise RuntimeError(f"Gemini gave up after 3 attempts: {last_exc}") from last_exc
 
 
-def generate_reply(suspect_id: str, prompt: str) -> str:
+def generate_reply(suspect_id: str, prompt: str, proven_facts: set[str]) -> str:
     """
     Generate a character reply.
     - Attempts Gemini API with the character's dedicated key.
@@ -343,21 +387,21 @@ def generate_reply(suspect_id: str, prompt: str) -> str:
         return _call_gemini_http(prompt, api_key)
     except Exception as exc:
         print(f"[FALLBACK] {suspect_id} using offline reply. Reason: {type(exc).__name__}: {exc}", flush=True)
-        return fallback_reply(suspect_id, state.proven_facts)
+        return fallback_reply(suspect_id, proven_facts)
 
 
 # ---------------------------------------------------------------------------
 # Core interrogation logic
 # ---------------------------------------------------------------------------
-async def reply_to(suspect_id: str, question: str, evidence_ids: set[str], consumes_question: bool) -> dict[str, Any]:
+async def reply_to(state: CaseState, suspect_id: str, question: str, evidence_ids: set[str], consumes_question: bool) -> dict[str, Any]:
     suspect = state.suspects[suspect_id]
 
     if state.solved:
-        return response_envelope(suspect_id, "The case has been resolved. Review the evidence chain before beginning a new investigation.", [], 0)
+        return response_envelope(state, suspect_id, "The case has been resolved. Review the evidence chain before beginning a new investigation.", [], 0)
 
     if consumes_question and suspect.questions >= MAX_QUESTIONS_PER_SUSPECT:
         suspect.status = "EXHAUSTED"
-        return response_envelope(suspect_id, "I've answered enough for now. Return when you have evidence that changes the question.", [], 0)
+        return response_envelope(state, suspect_id, "I've answered enough for now. Return when you have evidence that changes the question.", [], 0)
 
     if consumes_question:
         suspect.questions += 1
@@ -384,7 +428,7 @@ async def reply_to(suspect_id: str, question: str, evidence_ids: set[str], consu
     # once the culprit's stress crosses BREAKING (85%+), the case resolves immediately
     # rather than waiting on a separate accusation step the UI never exposed.
     if suspect_id == "noah_reed" and suspect.stress >= 85 and not state.solved:
-        state.solved = True
+        state.mark_solved()
         suspect.status = "CONFESSED"
         state.revealed_evidence.update(EVIDENCE.keys())
         state.proven_facts.update(item["fact"] for item in EVIDENCE.values())
@@ -395,16 +439,16 @@ async def reply_to(suspect_id: str, question: str, evidence_ids: set[str], consu
         )
         suspect.history.append({"question": question, "reply": confession_reply})
         suspect.history[:] = suspect.history[-6:]
-        return response_envelope(suspect_id, confession_reply, sorted(detected), pressure)
+        return response_envelope(state, suspect_id, confession_reply, sorted(detected), pressure)
 
     # generate_reply is guaranteed safe against Gemini-side errors — but the
     # overall asyncio.wait_for can still raise TimeoutError if the whole call
     # (including retries) overruns the budget, so that case needs its own
     # fallback rather than surfacing as a 500.
-    prompt = build_prompt(suspect_id, question, disclosures)
+    prompt = build_prompt(state, suspect_id, question, disclosures)
     try:
         reply = await asyncio.wait_for(
-            asyncio.to_thread(generate_reply, suspect_id, prompt),
+            asyncio.to_thread(generate_reply, suspect_id, prompt, set(state.proven_facts)),
             timeout=45,
         )
     except (asyncio.TimeoutError, TimeoutError):
@@ -412,16 +456,16 @@ async def reply_to(suspect_id: str, question: str, evidence_ids: set[str], consu
 
     suspect.history.append({"question": question, "reply": reply})
     suspect.history[:] = suspect.history[-6:]
-    return response_envelope(suspect_id, reply, sorted(detected), pressure)
+    return response_envelope(state, suspect_id, reply, sorted(detected), pressure)
 
 
-def response_envelope(suspect_id: str, reply: str, newly_revealed: list[str], pressure: int) -> dict[str, Any]:
+def response_envelope(state: CaseState, suspect_id: str, reply: str, newly_revealed: list[str], pressure: int) -> dict[str, Any]:
     return {
-        "suspect": public_suspect(suspect_id),
+        "suspect": public_suspect(state, suspect_id),
         "reply": reply,
         "pressure_delta": pressure,
         "newly_revealed_evidence": newly_revealed,
-        "case": case_progress(),
+        "case": case_progress(state),
     }
 
 
@@ -454,7 +498,7 @@ def _test_network() -> bool:
 
 
 @app.get("/api/case")
-def get_case() -> dict[str, Any]:
+def get_case(state: CaseState = Depends(current_case)) -> dict[str, Any]:
     return {
         "case_id": "SW-01",
         "title": "The Silent Witness",
@@ -463,34 +507,39 @@ def get_case() -> dict[str, Any]:
             {"id": k, "title": item["title"], "revealed": k in state.revealed_evidence}
             for k, item in EVIDENCE.items()
         ],
-        "progress": case_progress(),
+        "progress": case_progress(state),
+        # Lets a reloaded page pick the clock up where the server has it.
+        "seconds_remaining": state.seconds_remaining(),
+        "round_seconds": ROUND_SECONDS,
+        "result_submitted": state.result_submitted,
     }
 
 
 @app.get("/api/suspects")
-def get_suspects() -> dict[str, list[dict[str, Any]]]:
-    return {"suspects": [public_suspect(sid) for sid in SUSPECTS]}
+def get_suspects(state: CaseState = Depends(current_case)) -> dict[str, list[dict[str, Any]]]:
+    return {"suspects": [public_suspect(state, sid) for sid in SUSPECTS]}
 
 
 @app.get("/api/suspects/{suspect_id}")
-def get_suspect(suspect_id: str) -> dict[str, Any]:
+def get_suspect(suspect_id: str, state: CaseState = Depends(current_case)) -> dict[str, Any]:
     ensure_suspect(suspect_id)
-    return public_suspect(suspect_id)
+    return public_suspect(state, suspect_id)
 
 
 @app.post("/api/suspects/{suspect_id}/interrogate")
-async def interrogate(suspect_id: str, request: QuestionRequest) -> dict[str, Any]:
+async def interrogate(suspect_id: str, request: QuestionRequest, state: CaseState = Depends(current_case)) -> dict[str, Any]:
     ensure_suspect(suspect_id)
-    return await reply_to(suspect_id, request.question.strip(), set(), True)
+    return await reply_to(state, suspect_id, request.question.strip(), set(), True)
 
 
 @app.post("/api/suspects/{suspect_id}/present-evidence")
-async def present_evidence(suspect_id: str, request: EvidenceRequest) -> dict[str, Any]:
+async def present_evidence(suspect_id: str, request: EvidenceRequest, state: CaseState = Depends(current_case)) -> dict[str, Any]:
     ensure_suspect(suspect_id)
     if request.evidence_id not in EVIDENCE:
         raise HTTPException(status_code=404, detail=f"Unknown evidence ID: {request.evidence_id}")
     title = EVIDENCE[request.evidence_id]["title"]
     return await reply_to(
+        state,
         suspect_id,
         f"I am presenting {title}. Explain how it fits your account.",
         {request.evidence_id},
@@ -499,9 +548,9 @@ async def present_evidence(suspect_id: str, request: EvidenceRequest) -> dict[st
 
 
 @app.post("/api/case/accuse")
-def accuse(request: AccusationRequest) -> dict[str, Any]:
+def accuse(request: AccusationRequest, state: CaseState = Depends(current_case)) -> dict[str, Any]:
     ensure_suspect(request.suspect_id)
-    progress = case_progress()
+    progress = case_progress(state)
     if request.suspect_id != "noah_reed":
         return {
             "solved": False,
@@ -514,7 +563,7 @@ def accuse(request: AccusationRequest) -> dict[str, Any]:
             "reply": "Noah is suspicious, but suspicion is not proof. Establish the timeline, deliberate blackout, data motive, token ambiguity, and the authenticated maintenance contradiction.",
             "case": progress,
         }
-    state.solved = True
+    state.mark_solved()
     state.suspects["noah_reed"].status = "CONFESSED"
     return {
         "solved": True,
@@ -524,15 +573,231 @@ def accuse(request: AccusationRequest) -> dict[str, Any]:
             "camera blackout, token activity, and Meena's discovery leave no innocent explanation. He admits "
             "he built ambiguity around the evidence to conceal the altered signal data and silence Meena."
         ),
-        "case": case_progress(),
+        "case": case_progress(state),
     }
 
 
 @app.post("/api/case/reset")
-def reset_case() -> dict[str, Any]:
-    global state
-    state = CaseState()
-    return {"message": "The Silent Witness case was reset.", "case": case_progress()}
+def reset_case(key: str = Depends(player_key)) -> dict[str, Any]:
+    cases[key] = CaseState()
+    return {"message": "The Silent Witness case was reset.", "case": case_progress(cases[key])}
+
+
+# ---------------------------------------------------------------------------
+# Scoring — 100 points for this case, added to Adrian's case on the leaderboard
+# ---------------------------------------------------------------------------
+def calculate_case2_score(state: CaseState, time_taken: int) -> dict[str, int]:
+    """Score a finished case from the server's own state.
+
+    Mirrors the shape of Adrian's scoring (py.py calculate_solution_score):
+      milestones   40  - 8 per milestone proven (5)
+      evidence     20  - share of the 8 evidence items uncovered before the case closed
+      solved       20  - Noah's confession
+      efficiency   10  - fewer questions across all five suspects (solved cases only)
+      time         10  - 1 per 2 full minutes left on the clock (solved cases only)
+    """
+    milestones = sum(1 for done in case_milestones(state.proven_facts).values() if done)
+    found = state.evidence_at_solve if state.evidence_at_solve is not None else state.revealed_evidence
+    questions = sum(s.questions for s in state.suspects.values())
+
+    breakdown = {
+        "milestones": milestones * 8,
+        "evidence": round(20 * len(found) / len(EVIDENCE)),
+        "solved": 20 if state.solved else 0,
+        "efficiency": 0,
+        "time": 0,
+    }
+    if state.solved:
+        for limit, points in ((10, 10), (15, 8), (20, 6), (30, 4), (40, 2)):
+            if questions <= limit:
+                breakdown["efficiency"] = points
+                break
+        minutes_left = max(0, (ROUND_SECONDS - time_taken) // 60)
+        breakdown["time"] = min(10, minutes_left // 2)
+    breakdown["total"] = min(100, sum(breakdown.values()))
+    return breakdown
+
+
+# ---------------------------------------------------------------------------
+# Leaderboard — reads and writes the leaderboard.db owned by Adrian's server
+# ---------------------------------------------------------------------------
+def get_db() -> sqlite3.Connection:
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA foreign_keys = ON")
+    conn.execute("PRAGMA journal_mode = WAL")
+    return conn
+
+
+def init_db() -> None:
+    # Same schema as server.py's init_db, so this server also works when it
+    # starts before Adrian's server has created the file.
+    conn = get_db()
+    conn.executescript("""
+        CREATE TABLE IF NOT EXISTS students (
+            id         INTEGER PRIMARY KEY AUTOINCREMENT,
+            code       TEXT    NOT NULL COLLATE NOCASE,
+            joined_at  TEXT    NOT NULL,
+            UNIQUE(code)
+        );
+        CREATE TABLE IF NOT EXISTS results (
+            id                   INTEGER PRIMARY KEY AUTOINCREMENT,
+            student_id           INTEGER NOT NULL REFERENCES students(id),
+            case_id              TEXT    NOT NULL DEFAULT 'silent_witness',
+            outcome              TEXT    NOT NULL,
+            solved               INTEGER NOT NULL,
+            score                INTEGER NOT NULL,
+            questions_used       INTEGER NOT NULL,
+            milestones_completed INTEGER NOT NULL,
+            final_stress         INTEGER NOT NULL,
+            time_taken           INTEGER NOT NULL,
+            completed_at         TEXT    NOT NULL,
+            UNIQUE(student_id, case_id, completed_at)
+        );
+    """)
+    conn.commit()
+    conn.close()
+
+
+init_db()
+
+
+def best_case_score(conn: sqlite3.Connection, code: str, case_id: str) -> int | None:
+    row = conn.execute(
+        """
+        SELECT MAX(r.score) AS score FROM results r
+        JOIN students s ON s.id = r.student_id
+        WHERE s.code = ? AND r.case_id = ?
+        """,
+        (code, case_id),
+    ).fetchone()
+    return row["score"] if row and row["score"] is not None else None
+
+
+def require_player(key: str) -> str:
+    if key == LOCAL_PLAYER:
+        raise HTTPException(status_code=400, detail="Participant code required (X-Player-Code header).")
+    return key
+
+
+@app.get("/api/player")
+def get_player(key: str = Depends(player_key)) -> dict[str, Any]:
+    """Points the player carries in from Adrian's case."""
+    code = require_player(key)
+    conn = get_db()
+    try:
+        return {
+            "code": code,
+            "case1_score": best_case_score(conn, code, CASE1_ID),
+            "case2_best": best_case_score(conn, code, CASE2_ID),
+        }
+    finally:
+        conn.close()
+
+
+@app.post("/api/case/result")
+def submit_result(key: str = Depends(player_key), state: CaseState = Depends(current_case)) -> dict[str, Any]:
+    code = require_player(key)
+    elapsed = int(time.time() - state.started_at)
+    timed_out = elapsed >= ROUND_SECONDS - 5  # small allowance for client/server clock drift
+    if not state.solved and not timed_out:
+        raise HTTPException(status_code=400, detail="The case is still open. Cannot submit a result yet.")
+
+    time_taken = min(elapsed, ROUND_SECONDS)
+    breakdown = calculate_case2_score(state, time_taken)
+
+    conn = get_db()
+    try:
+        case1 = best_case_score(conn, code, CASE1_ID)
+        summary = {
+            "case1_score": case1,
+            "case2_score": breakdown["total"],
+            "breakdown": breakdown,
+            "total_score": (case1 or 0) + breakdown["total"],
+            "solved": state.solved,
+            "time_taken": time_taken,
+            "questions_used": sum(s.questions for s in state.suspects.values()),
+        }
+        if state.result_submitted:
+            return {**summary, "duplicate": True}
+
+        conn.execute(
+            "INSERT OR IGNORE INTO students (code, joined_at) VALUES (?, ?)",
+            (code, datetime.datetime.now().isoformat()),
+        )
+        student_id = conn.execute("SELECT id FROM students WHERE code = ?", (code,)).fetchone()["id"]
+        conn.execute(
+            """
+            INSERT INTO results
+                (student_id, case_id, outcome, solved, score,
+                 questions_used, milestones_completed, final_stress,
+                 time_taken, completed_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                student_id,
+                CASE2_ID,
+                "CONFESSION" if state.solved else "TIME_EXPIRED",
+                1 if state.solved else 0,
+                breakdown["total"],
+                summary["questions_used"],
+                breakdown["milestones"] // 8,
+                state.suspects["noah_reed"].stress,
+                time_taken,
+                datetime.datetime.now().isoformat(),
+            ),
+        )
+        conn.commit()
+        state.result_submitted = True
+        return {**summary, "duplicate": False}
+    finally:
+        conn.close()
+
+
+# Best result per player per case, then the two cases added together.
+# Ranked: highest total -> lowest combined time.
+LEADERBOARD_SQL = """
+    WITH best AS (
+        SELECT r.student_id, r.case_id, r.score, r.time_taken, r.solved,
+               ROW_NUMBER() OVER (
+                   PARTITION BY r.student_id, r.case_id
+                   ORDER BY r.score DESC, r.time_taken ASC
+               ) AS rn
+        FROM results r
+        WHERE r.case_id IN (:case1, :case2)
+    ),
+    totals AS (
+        SELECT s.code AS promo_code,
+               MAX(CASE WHEN b.case_id = :case1 THEN b.score END)  AS case1_score,
+               MAX(CASE WHEN b.case_id = :case2 THEN b.score END)  AS case2_score,
+               MAX(CASE WHEN b.case_id = :case2 THEN b.solved END) AS case2_solved,
+               SUM(b.score)      AS total_score,
+               SUM(b.time_taken) AS total_time
+        FROM best b
+        JOIN students s ON s.id = b.student_id
+        WHERE b.rn = 1
+        GROUP BY s.id
+    )
+    SELECT *, ROW_NUMBER() OVER (ORDER BY total_score DESC, total_time ASC) AS rank
+    FROM totals
+"""
+
+
+@app.get("/api/leaderboard")
+def get_leaderboard(key: str = Depends(player_key)) -> dict[str, Any]:
+    conn = get_db()
+    try:
+        params = {"case1": CASE1_ID, "case2": CASE2_ID}
+        rows = conn.execute(LEADERBOARD_SQL + " ORDER BY rank LIMIT 50", params).fetchall()
+        me = None
+        if key != LOCAL_PLAYER:
+            me = conn.execute(
+                f"SELECT * FROM ({LEADERBOARD_SQL}) WHERE promo_code = :code COLLATE NOCASE",
+                {**params, "code": key},
+            ).fetchone()
+        return {"leaderboard": [dict(r) for r in rows], "me": dict(me) if me else None}
+    finally:
+        conn.close()
 
 
 def ensure_suspect(suspect_id: str) -> None:

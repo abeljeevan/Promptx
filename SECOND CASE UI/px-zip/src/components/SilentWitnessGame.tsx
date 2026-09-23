@@ -1,10 +1,17 @@
 import { Canvas, useFrame } from "@react-three/fiber";
-import { X, Send, RotateCcw, Loader2, ChevronLeft, ChevronRight } from "lucide-react";
+import { X, Send, RotateCcw, Loader2, ChevronLeft, ChevronRight, Trophy } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Points } from "three";
 import roomAsset from "../assets/interrogation-room.png";
 import victimAsset from "../assets/meena-victim-file.png";
 import victimFileProp from "../assets/victim-file-prop.png";
+// Adrian's case evidence folder, trimmed to the stack, so both cases share the prop.
+import evidenceStackProp from "../assets/evidence-stack-prop.png";
+import noahPhoto from "../assets/suspects/noah.jpeg";
+import danielPhoto from "../assets/suspects/daniel.jpeg";
+import eliasPhoto from "../assets/suspects/elias.jpeg";
+import leenaPhoto from "../assets/suspects/leena.jpeg";
+import avePhoto from "../assets/suspects/ave.jpeg";
 import accessEvidenceImg from "../assets/evidence/access.png";
 import cctvEvidenceImg from "../assets/evidence/cctv.png";
 import chatEvidenceImg from "../assets/evidence/chat.png";
@@ -55,8 +62,9 @@ type Suspect = {
   statement: string;
   position: string;
   mask: string;
-  cycle: string;
-  delay: string;
+  photo: string;
+  // Horizontal centre of the seat, as a % of the stage, for the hover photo card.
+  centre: number;
 };
 
 type Evidence = {
@@ -99,15 +107,49 @@ type InterrogateResponse = {
   case: CaseProgress;
 };
 
+type CaseSnapshot = {
+  progress: CaseProgress;
+  seconds_remaining: number;
+};
+
+type ScoreBreakdown = {
+  milestones: number;
+  evidence: number;
+  solved: number;
+  efficiency: number;
+  time: number;
+  total: number;
+};
+
+type CaseResult = {
+  case1_score: number | null;
+  case2_score: number;
+  breakdown: ScoreBreakdown;
+  total_score: number;
+  solved: boolean;
+  time_taken: number;
+  questions_used: number;
+};
+
+type LeaderboardRow = {
+  promo_code: string;
+  case1_score: number | null;
+  case2_score: number | null;
+  case2_solved: number | null;
+  total_score: number;
+  total_time: number;
+  rank: number;
+};
+
 // ---------------------------------------------------------------------------
 // Static data
 // ---------------------------------------------------------------------------
 const suspects: Suspect[] = [
-  { id: "noah",   name: "NOAH REED",     role: "THE STUDENT",       statement: "I just focused on my work. That night, I was in the lab.",                            position: "suspect-noah",   mask: "polygon(47.6% 19.4%,61.4% 25%,59.9% 32.6%,66% 42.4%,100% 54.2%,100% 100%,0 100%,0 52.8%,23% 42.4%,24.6% 33.3%,9.2% 27.1%)",           cycle: "4.6s", delay: "-.7s"  },
-  { id: "daniel", name: "DANIEL CROSS",  role: "THE PROFESSOR",     statement: "I saw someone near the chamber, but the storm made certainty impossible.",             position: "suspect-daniel", mask: "polygon(47% 20.1%,67% 23.6%,67% 33.3%,79.8% 41%,100% 45.1%,100% 100%,0 100%,0 47.2%,21.4% 40.3%,32.8% 32.6%,31.3% 22.9%)",                       cycle: "3.9s", delay: "-2.1s" },
-  { id: "elias",  name: "ELIAS WIZARD",  role: "THE ADMINISTRATOR", statement: "Sensitive research was quarantined. That was procedure, not concealment.",            position: "suspect-elias",  mask: "polygon(52.4% 19.4%,67.4% 22.9%,67.4% 32.6%,87.4% 41.7%,100% 48.6%,100% 100%,0 100%,0 47.9%,12.5% 41.7%,32.5% 32.6%,32.5% 22.2%)",                              cycle: "4.9s", delay: "-1.3s" },
-  { id: "leena",  name: "LEENA RAO",     role: "THE COLLEAGUE",     statement: "I didn't alter the dataset. I copied it because something was wrong.",                position: "suspect-leena",  mask: "polygon(52.7% 20.8%,74.1% 29.2%,82.6% 38.9%,92.6% 45.1%,100% 48.6%,100% 100%,0 100%,0 48.6%,8.5% 45.1%,17.1% 38.9%,25.6% 29.2%)",                              cycle: "4.2s", delay: "-3.2s" },
-  { id: "ave",    name: "AVE MORGAN",    role: "THE FRIEND",        statement: "The camera failed. My token being used doesn't mean I was there.",                    position: "suspect-ave",    mask: "polygon(52.7% 20.1%,85.5% 32.6%,96.9% 45.1%,100% 48.6%,100% 100%,0 100%,0 47.2%,5.7% 41.7%,17.1% 31.9%)",                       cycle: "3.7s", delay: "-1.8s" },
+  { id: "noah",   name: "NOAH REED",     role: "THE STUDENT",       statement: "I just focused on my work. That night, I was in the lab.",                            position: "suspect-noah",   mask: "polygon(47.6% 19.4%,61.4% 25%,59.9% 32.6%,66% 42.4%,100% 54.2%,100% 100%,0 100%,0 52.8%,23% 42.4%,24.6% 33.3%,9.2% 27.1%)",           photo: noahPhoto,   centre: 9.5 },
+  { id: "daniel", name: "DANIEL CROSS",  role: "THE PROFESSOR",     statement: "I saw someone near the chamber, but the storm made certainty impossible.",             position: "suspect-daniel", mask: "polygon(47% 20.1%,67% 23.6%,67% 33.3%,79.8% 41%,100% 45.1%,100% 100%,0 100%,0 47.2%,21.4% 40.3%,32.8% 32.6%,31.3% 22.9%)",                       photo: danielPhoto, centre: 30 },
+  { id: "elias",  name: "ELIAS WIZARD",  role: "THE ADMINISTRATOR", statement: "Sensitive research was quarantined. That was procedure, not concealment.",            position: "suspect-elias",  mask: "polygon(52.4% 19.4%,67.4% 22.9%,67.4% 32.6%,87.4% 41.7%,100% 48.6%,100% 100%,0 100%,0 47.9%,12.5% 41.7%,32.5% 32.6%,32.5% 22.2%)",                              photo: eliasPhoto,  centre: 50 },
+  { id: "leena",  name: "LEENA RAO",     role: "THE COLLEAGUE",     statement: "I didn't alter the dataset. I copied it because something was wrong.",                position: "suspect-leena",  mask: "polygon(52.7% 20.8%,74.1% 29.2%,82.6% 38.9%,92.6% 45.1%,100% 48.6%,100% 100%,0 100%,0 48.6%,8.5% 45.1%,17.1% 38.9%,25.6% 29.2%)",                              photo: leenaPhoto,  centre: 69 },
+  { id: "ave",    name: "AVE MORGAN",    role: "THE FRIEND",        statement: "The camera failed. My token being used doesn't mean I was there.",                    position: "suspect-ave",    mask: "polygon(52.7% 20.1%,85.5% 32.6%,96.9% 45.1%,100% 48.6%,100% 100%,0 100%,0 47.2%,5.7% 41.7%,17.1% 31.9%)",                       photo: avePhoto,    centre: 91 },
 ];
 
 const evidence: Evidence[] = [
@@ -159,40 +201,62 @@ function Atmosphere() {
 // ---------------------------------------------------------------------------
 // API helpers
 // ---------------------------------------------------------------------------
-async function apiInterrogate(suspectId: string, question: string): Promise<InterrogateResponse> {
-  const res = await fetch(`${BACKEND_URL}/api/suspects/${suspectId}/interrogate`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ question }),
+// The participant code from Adrian's case arrives as ?code= on the NEXT CASE
+// link. It is kept for the tab's lifetime so a reload stays on the same case.
+const PLAYER_CODE_KEY = "px-player-code";
+
+function readPlayerCode(): string {
+  if (typeof window === "undefined") return "";
+  const fromUrl = new URLSearchParams(window.location.search).get("code")?.trim();
+  try {
+    if (fromUrl) sessionStorage.setItem(PLAYER_CODE_KEY, fromUrl);
+    return fromUrl || sessionStorage.getItem(PLAYER_CODE_KEY) || "";
+  } catch {
+    return fromUrl || "";
+  }
+}
+
+let playerCode = "";
+
+async function api<T>(path: string, init: RequestInit = {}, failure = "Request failed"): Promise<T> {
+  const res = await fetch(`${BACKEND_URL}${path}`, {
+    ...init,
+    headers: { "Content-Type": "application/json", "X-Player-Code": playerCode, ...init.headers },
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: res.statusText }));
-    throw new Error((err as { detail?: string }).detail ?? "Interrogation request failed");
+    throw new Error((err as { detail?: string }).detail ?? failure);
   }
-  return res.json() as Promise<InterrogateResponse>;
+  return res.json() as Promise<T>;
 }
 
-async function apiPresentEvidence(suspectId: string, evidenceId: string): Promise<InterrogateResponse> {
-  const res = await fetch(`${BACKEND_URL}/api/suspects/${suspectId}/present-evidence`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ evidence_id: evidenceId }),
-  });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({ detail: res.statusText }));
-    throw new Error((err as { detail?: string }).detail ?? "Evidence presentation failed");
-  }
-  return res.json() as Promise<InterrogateResponse>;
-}
+const apiInterrogate = (suspectId: string, question: string) =>
+  api<InterrogateResponse>(`/api/suspects/${suspectId}/interrogate`,
+    { method: "POST", body: JSON.stringify({ question }) }, "Interrogation request failed");
 
-async function apiGetSuspect(suspectId: string): Promise<SuspectApiData> {
-  const res = await fetch(`${BACKEND_URL}/api/suspects/${suspectId}`);
-  if (!res.ok) throw new Error("Failed to fetch suspect data");
-  return res.json() as Promise<SuspectApiData>;
-}
+const apiPresentEvidence = (suspectId: string, evidenceId: string) =>
+  api<InterrogateResponse>(`/api/suspects/${suspectId}/present-evidence`,
+    { method: "POST", body: JSON.stringify({ evidence_id: evidenceId }) }, "Evidence presentation failed");
+
+const apiGetSuspect = (suspectId: string) =>
+  api<SuspectApiData>(`/api/suspects/${suspectId}`, {}, "Failed to fetch suspect data");
+
+const apiGetSuspects = () => api<{ suspects: SuspectApiData[] }>("/api/suspects");
+const apiGetCase = () => api<CaseSnapshot>("/api/case");
+const apiGetPlayer = () => api<{ case1_score: number | null }>("/api/player");
+const apiSubmitResult = () => api<CaseResult>("/api/case/result", { method: "POST" }, "Failed to save result");
+const apiLeaderboard = () => api<{ leaderboard: LeaderboardRow[]; me: LeaderboardRow | null }>("/api/leaderboard");
 
 async function apiReset(): Promise<void> {
-  await fetch(`${BACKEND_URL}/api/case/reset`, { method: "POST" });
+  await api("/api/case/reset", { method: "POST" });
+}
+
+const BACKEND_TO_UI_SUSPECT = Object.fromEntries(
+  Object.entries(UI_TO_BACKEND).map(([ui, backend]) => [backend, ui]),
+) as Record<string, SuspectId>;
+
+function completedMilestones(progress: CaseProgress): string[] {
+  return Object.entries(progress.milestones).filter(([, done]) => done).map(([name]) => name);
 }
 
 // ---------------------------------------------------------------------------
@@ -205,6 +269,66 @@ function formatTime(seconds: number): string {
   const m = String(Math.floor(safe / 60)).padStart(2, "0");
   const s = String(safe % 60).padStart(2, "0");
   return `${m}:${s}`;
+}
+
+// Mirrors calculate_case2_score in second case/server.py.
+const SCORE_LINES: [keyof Omit<ScoreBreakdown, "total">, string, number][] = [
+  ["milestones", "MILESTONES PROVEN", 40],
+  ["evidence", "EVIDENCE UNCOVERED", 20],
+  ["solved", "CONFESSION", 20],
+  ["efficiency", "QUESTION EFFICIENCY", 10],
+  ["time", "TIME REMAINING", 10],
+];
+
+// Both cases added together: best Adrian Vale score + best Silent Witness score.
+function LeaderboardView({ code, onClose }: { code: string; onClose: () => void }) {
+  const [rows, setRows] = useState<LeaderboardRow[] | null>(null);
+  const [me, setMe] = useState<LeaderboardRow | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    apiLeaderboard()
+      .then((data) => { setRows(data.leaderboard); setMe(data.me); })
+      .catch((err) => setError(err instanceof Error ? err.message : "Could not load the leaderboard"));
+  }, []);
+
+  const isMe = (row: LeaderboardRow) => row.promo_code.toUpperCase() === code.toUpperCase();
+  const meListed = rows?.some(isMe);
+
+  return (
+    <div className="modal-backdrop leaderboard-backdrop" onClick={onClose}>
+      <section className="leaderboard-view" onClick={(event) => event.stopPropagation()} aria-label="Leaderboard">
+        <header>
+          <div><small>// COMBINED STANDINGS — CASE 1 + CASE 2</small><h2>LEADERBOARD</h2></div>
+          <button className="icon-button" onClick={onClose} aria-label="Close leaderboard"><X /></button>
+        </header>
+        {error && <p className="leaderboard-empty">{error}</p>}
+        {!error && !rows && <p className="leaderboard-empty">LOADING STANDINGS…</p>}
+        {rows && rows.length === 0 && <p className="leaderboard-empty">NO RESULTS YET.</p>}
+        {rows && rows.length > 0 && (
+          <table className="leaderboard-table">
+            <thead>
+              <tr><th>#</th><th>CODE</th><th>CASE 1</th><th>CASE 2</th><th>TOTAL</th><th>TIME</th></tr>
+            </thead>
+            <tbody>
+              {[...rows, ...(me && !meListed ? [me] : [])].map((row) => (
+                <tr key={row.promo_code} className={isMe(row) ? "leaderboard-me" : undefined}>
+                  <td>{row.rank}</td>
+                  <td>{row.promo_code}</td>
+                  <td>{row.case1_score ?? "—"}</td>
+                  <td>{row.case2_score ?? "—"}</td>
+                  <td><b>{row.total_score}</b></td>
+                  <td>{formatTime(row.total_time)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+        {me && <p className="leaderboard-rank">YOUR RANK: <b>#{me.rank}</b> — {me.total_score} POINTS</p>}
+        <button className="terminal-button" onClick={onClose}>CLOSE / RETURN</button>
+      </section>
+    </div>
+  );
 }
 
 export function SilentWitnessGame() {
@@ -227,6 +351,47 @@ export function SilentWitnessGame() {
   const [loading, setLoading] = useState(false);
   const [apiError, setApiError] = useState<string | null>(null);
   const [revealedEvidence, setRevealedEvidence] = useState<Set<string>>(new Set());
+  const [code, setCode] = useState<string>(() => readPlayerCode());
+  const [codeDraft, setCodeDraft] = useState("");
+  const [case1Score, setCase1Score] = useState<number | null>(null);
+  const [result, setResult] = useState<CaseResult | null>(null);
+  const [resultError, setResultError] = useState<string | null>(null);
+  const [leaderboardOpen, setLeaderboardOpen] = useState(false);
+  const submitting = useRef(false);
+
+  // Declared before the other effects so every request carries the code.
+  useEffect(() => {
+    playerCode = code;
+  }, [code]);
+
+  // Pick up this player's case where the server has it: clock, progress,
+  // suspects, and the points carried in from Adrian's case.
+  useEffect(() => {
+    if (!code) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const [snapshot, roster, player] = await Promise.all([apiGetCase(), apiGetSuspects(), apiGetPlayer()]);
+        if (cancelled) return;
+        setSecondsRemaining(snapshot.seconds_remaining);
+        setMilestones(completedMilestones(snapshot.progress));
+        setRevealedEvidence(new Set(snapshot.progress.revealed_evidence));
+        setConfessed(snapshot.progress.solved);
+        setUnsolved(!snapshot.progress.solved && snapshot.seconds_remaining === 0);
+        setCase1Score(player.case1_score);
+        for (const item of roster.suspects) {
+          const id = BACKEND_TO_UI_SUSPECT[item.id];
+          if (!id) continue;
+          setStress((prev) => ({ ...prev, [id]: item.stress }));
+          setStressLabel((prev) => ({ ...prev, [id]: item.stress_state }));
+          setQuestionsLeft((prev) => ({ ...prev, [id]: item.questions_left }));
+        }
+      } catch (err) {
+        if (!cancelled) setApiError(err instanceof Error ? err.message : "Could not reach the case server.");
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [code]);
 
   const suspect = suspects.find((item) => item.id === activeSuspect);
   const selectedEvidence = evidence.find((item) => item.id === activeEvidence);
@@ -242,6 +407,7 @@ export function SilentWitnessGame() {
       if (event.key === "Escape") {
         setVictimOpen(false);
         setEvidenceFileOpen(false);
+        setLeaderboardOpen(false);
         return;
       }
       if (!evidenceFileOpen) return;
@@ -254,7 +420,7 @@ export function SilentWitnessGame() {
 
   // 20-minute round timer — mirrors Adrian's case, but with its own longer budget.
   useEffect(() => {
-    if (confessed || unsolved) return;
+    if (!code || confessed || unsolved) return;
     const id = window.setInterval(() => {
       setSecondsRemaining((value) => Math.max(0, value - 1));
     }, 1000);
@@ -266,6 +432,24 @@ export function SilentWitnessGame() {
       setUnsolved(true);
     }
   }, [secondsRemaining, confessed]);
+
+  // Score the finished case once. The server works the score out from its own
+  // state; a repeat call (e.g. after a reload) returns the same result.
+  const submitResult = useCallback(async () => {
+    if (submitting.current) return;
+    submitting.current = true;
+    setResultError(null);
+    try {
+      setResult(await apiSubmitResult());
+    } catch (err) {
+      setResultError(err instanceof Error ? err.message : "Failed to save result");
+      submitting.current = false;
+    }
+  }, []);
+
+  useEffect(() => {
+    if (code && (confessed || unsolved) && !result) void submitResult();
+  }, [code, confessed, unsolved, result, submitResult]);
 
   // Process API response and update all state
   const applyResponse = useCallback((data: InterrogateResponse, suspectUiId: SuspectId) => {
@@ -346,6 +530,10 @@ export function SilentWitnessGame() {
     setActiveEvidence(null);
     setApiError(null);
     setRevealedEvidence(new Set());
+    setResult(null);
+    setResultError(null);
+    setLeaderboardOpen(false);
+    submitting.current = false;
   }, []);
 
   return (
@@ -385,19 +573,30 @@ export function SilentWitnessGame() {
             className={`suspect-object ${person.position}`}
             mask={person.mask}
             sceneImage={roomAsset}
-            cycle={person.cycle}
-            delay={person.delay}
             onClick={() => { void selectSuspect(person.id, person.statement); }}
           />
         ))}
 
+        {/* Hovering a suspect lifts their photo card above the seat (not for the
+            one being interrogated — the panel already shows their photo). */}
+        {suspects.map((person) => (
+          <figure
+            key={person.id}
+            className={`suspect-card${hoveredObject === person.id && activeSuspect !== person.id ? " suspect-card--visible" : ""}`}
+            style={{ left: `${person.centre}%` }}
+            aria-hidden="true"
+          >
+            <img src={person.photo} alt="" draggable={false} />
+            <figcaption><b>{person.name}</b><span>{person.role}</span></figcaption>
+          </figure>
+        ))}
+
         <InteractiveInvestigationObject
           id="victim-file"
-          label="Examine the victim file"
+          label="Open the victim file"
           activeId={hoveredObject}
           onActiveChange={setHoveredObject}
           className="table-prop table-prop--victim"
-          mask="polygon(14% 7%,82% 0,98% 18%,89% 94%,8% 100%,0 23%)"
           onClick={() => setVictimOpen(true)}
         >
           <img src={victimFileProp} alt="" width={1024} height={768} draggable={false} />
@@ -405,15 +604,31 @@ export function SilentWitnessGame() {
 
         <InteractiveInvestigationObject
           id="evidence-file"
-          label="Examine the evidence file"
+          label="Open the evidence file"
           activeId={hoveredObject}
           onActiveChange={setHoveredObject}
           className="table-prop table-prop--evidence"
-          mask="polygon(7% 28%,68% 0,100% 24%,91% 74%,31% 100%,0 72%)"
-          sceneImage={roomAsset}
-          cycle="5.2s"
           onClick={() => { setEvidenceFileIndex(0); setEvidenceFileOpen(true); }}
-        />
+        >
+          <img src={evidenceStackProp} alt="" width={610} height={439} draggable={false} />
+        </InteractiveInvestigationObject>
+
+        {/* Same pin-and-label language as the suspect markers in the scene, so
+            the two files read as things to click. */}
+        {([
+          ["victim-file", "table-marker--victim", "VICTIM FILE"],
+          ["evidence-file", "table-marker--evidence", "EVIDENCE FILE"],
+        ] as const).map(([id, position, title]) => (
+          <span
+            key={id}
+            className={`table-marker ${position}${hoveredObject === id ? " table-marker--active" : ""}`}
+            aria-hidden="true"
+          >
+            <i />
+            <b>{title}</b>
+            <small>CLICK TO OPEN</small>
+          </span>
+        ))}
 
         {evidence.map((item, index) => (
           <button
@@ -431,6 +646,12 @@ export function SilentWitnessGame() {
             <small>— THE SILENT WITNESS</small>
           </div>
           <div className="sw-hud-footer-stats">
+            {case1Score !== null && (
+              <>
+                <span title="Points carried over from Adrian's case">CASE 1 POINTS <b>{String(case1Score).padStart(3, "0")}</b></span>
+                <i className="sw-hud-divider" />
+              </>
+            )}
             <span>TIME REMAINING <b className={secondsRemaining <= 60 ? "sw-hud-time-critical" : ""}>{formatTime(secondsRemaining)}</b></span>
             <i className="sw-hud-divider" />
             <span>EVIDENCE <b>{String(revealedEvidence.size).padStart(2, "0")}/08</b></span>
@@ -491,7 +712,10 @@ export function SilentWitnessGame() {
       {suspect && (
         <aside className="interrogation-panel">
           <header>
-            <div><small>// ACTIVE INTERROGATION</small><h2>{suspect.name}</h2><p>{suspect.role}</p></div>
+            <div className="interrogation-id">
+              <img src={suspect.photo} alt={suspect.name} className="interrogation-photo" />
+              <div><small>// ACTIVE INTERROGATION</small><h2>{suspect.name}</h2><p>{suspect.role}</p></div>
+            </div>
             <button className="icon-button" onClick={() => { setActiveSuspect(null); setPresenting(false); setApiError(null); }} aria-label="Close interrogation"><X /></button>
           </header>
           <div className="stress-label">
@@ -597,7 +821,60 @@ export function SilentWitnessGame() {
             {!confessed && " — NO CONFESSION RECORDED"}
           </p>
 
-          <button className="terminal-button" onClick={() => { void reset(); }}><RotateCcw size={16} /> REOPEN CASE</button>
+          {result && (
+            <section className="score-card" aria-label="Score">
+              <div className="score-card-totals">
+                <div><span>CASE 1 · ADRIAN VALE</span><b>{result.case1_score ?? "—"}</b></div>
+                <i>+</i>
+                <div><span>CASE 2 · SILENT WITNESS</span><b>{result.case2_score}</b></div>
+                <i>=</i>
+                <div className="score-card-total"><span>TOTAL</span><b>{result.total_score}</b></div>
+              </div>
+              <ul className="score-card-breakdown">
+                {SCORE_LINES.map(([key, label, max]) => (
+                  <li key={key}><span>{label}</span><b>{result.breakdown[key]}/{max}</b></li>
+                ))}
+              </ul>
+              {result.case1_score === null && (
+                <p className="score-card-note">No Adrian Vale result found for {code} — only this case counts toward the total.</p>
+              )}
+            </section>
+          )}
+          {!result && !resultError && <p className="confession-meta">SCORING CASE…</p>}
+          {resultError && (
+            <p className="score-card-error">
+              {resultError} <button type="button" onClick={() => { void submitResult(); }}>RETRY</button>
+            </p>
+          )}
+
+          <div className="confession-actions">
+            <button className="terminal-button" onClick={() => setLeaderboardOpen(true)}><Trophy size={16} /> VIEW LEADERBOARD</button>
+            <button className="terminal-button" onClick={() => { void reset(); }}><RotateCcw size={16} /> REOPEN CASE</button>
+          </div>
+        </div>
+      )}
+
+      {leaderboardOpen && <LeaderboardView code={code} onClose={() => setLeaderboardOpen(false)} />}
+
+      {/* Players normally arrive from Adrian's case with their code in the
+          link; anyone opening this page directly is asked for it. */}
+      {!code && (
+        <div className="code-gate">
+          <form
+            onSubmit={(event) => {
+              event.preventDefault();
+              const value = codeDraft.trim();
+              if (!value) return;
+              try { sessionStorage.setItem(PLAYER_CODE_KEY, value); } catch { /* per-tab only */ }
+              setCode(value);
+            }}
+          >
+            <small>[ THE SILENT WITNESS // SWD-001 ]</small>
+            <h2>ENTER YOUR PARTICIPANT CODE</h2>
+            <p>Use the same code as Adrian Vale's case so both scores add up on the leaderboard.</p>
+            <input value={codeDraft} onChange={(event) => setCodeDraft(event.target.value)} placeholder="PX-001" autoFocus />
+            <button className="terminal-button" type="submit">BEGIN INVESTIGATION</button>
+          </form>
         </div>
       )}
     </main>
