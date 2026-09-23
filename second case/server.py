@@ -296,7 +296,11 @@ def _call_gemini_http(prompt: str, api_key: str) -> str:
     url = f"https://{GEMINI_HOST}/v1beta/models/{MODEL}:generateContent?{urlencode({'key': api_key})}"
     body = json.dumps({
         "contents": [{"role": "user", "parts": [{"text": prompt}]}],
-        "generationConfig": {"temperature": 0.55, "maxOutputTokens": 260},
+        "generationConfig": {
+            "temperature": 0.55,
+            "maxOutputTokens": 1024,
+            "thinkingConfig": {"thinkingBudget": 0},
+        },
     }).encode("utf-8")
     req = Request(url, data=body, headers={"Content-Type": "application/json"}, method="POST")
 
@@ -376,12 +380,35 @@ async def reply_to(suspect_id: str, question: str, evidence_ids: set[str], consu
         pressure = -2
     suspect.stress = max(0, min(100, suspect.stress + pressure))
 
-    # generate_reply is guaranteed safe — never raises
+    # Forced confession: mirrors Adrian's rule (py.py check_confession_eligibility) —
+    # once the culprit's stress crosses BREAKING (85%+), the case resolves immediately
+    # rather than waiting on a separate accusation step the UI never exposed.
+    if suspect_id == "noah_reed" and suspect.stress >= 85 and not state.solved:
+        state.solved = True
+        suspect.status = "CONFESSED"
+        state.revealed_evidence.update(EVIDENCE.keys())
+        state.proven_facts.update(item["fact"] for item in EVIDENCE.values())
+        confession_reply = (
+            "Noah's precision finally fails him. The authenticated maintenance sequence, physical interaction, "
+            "camera blackout, token activity, and Meena's discovery leave no innocent explanation. He admits "
+            "he built ambiguity around the evidence to conceal the altered signal data and silence Meena."
+        )
+        suspect.history.append({"question": question, "reply": confession_reply})
+        suspect.history[:] = suspect.history[-6:]
+        return response_envelope(suspect_id, confession_reply, sorted(detected), pressure)
+
+    # generate_reply is guaranteed safe against Gemini-side errors — but the
+    # overall asyncio.wait_for can still raise TimeoutError if the whole call
+    # (including retries) overruns the budget, so that case needs its own
+    # fallback rather than surfacing as a 500.
     prompt = build_prompt(suspect_id, question, disclosures)
-    reply = await asyncio.wait_for(
-        asyncio.to_thread(generate_reply, suspect_id, prompt),
-        timeout=45,
-    )
+    try:
+        reply = await asyncio.wait_for(
+            asyncio.to_thread(generate_reply, suspect_id, prompt),
+            timeout=45,
+        )
+    except (asyncio.TimeoutError, TimeoutError):
+        reply = fallback_reply(suspect_id, state.proven_facts)
 
     suspect.history.append({"question": question, "reply": reply})
     suspect.history[:] = suspect.history[-6:]
@@ -522,6 +549,6 @@ def ensure_suspect(suspect_id: str) -> None:
 if __name__ == "__main__":
     import uvicorn
     print("=" * 60)
-    print("The Silent Witness API  —  http://127.0.0.1:8000")
+    print("The Silent Witness API  —  http://127.0.0.1:8010")
     print("=" * 60)
-    uvicorn.run(app, host="127.0.0.1", port=8000, reload=False)
+    uvicorn.run(app, host="127.0.0.1", port=8010, reload=False)

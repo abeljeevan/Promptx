@@ -1,16 +1,24 @@
 import { Canvas, useFrame } from "@react-three/fiber";
-import { X, Send, FileWarning, RotateCcw, Loader2 } from "lucide-react";
+import { X, Send, RotateCcw, Loader2, ChevronLeft, ChevronRight } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Points } from "three";
 import roomAsset from "../assets/interrogation-room.png";
 import victimAsset from "../assets/meena-victim-file.png";
 import victimFileProp from "../assets/victim-file-prop.png";
+import accessEvidenceImg from "../assets/evidence/access.png";
+import cctvEvidenceImg from "../assets/evidence/cctv.png";
+import chatEvidenceImg from "../assets/evidence/chat.png";
+import labEvidenceImg from "../assets/evidence/lab.png";
+import phoneEvidenceImg from "../assets/evidence/phone.png";
+import maintenanceEvidenceImg from "../assets/evidence/maintenance.png";
+import noteEvidenceImg from "../assets/evidence/note.png";
+import tokenEvidenceImg from "../assets/evidence/token.png";
 import { InteractiveInvestigationObject } from "./InteractiveInvestigationObject";
 
 // ---------------------------------------------------------------------------
 // Backend configuration
 // ---------------------------------------------------------------------------
-const BACKEND_URL = "http://127.0.0.1:8000";
+const BACKEND_URL = "http://127.0.0.1:8010";
 
 
 // Map UI suspect IDs → backend suspect IDs
@@ -60,6 +68,7 @@ type Evidence = {
   left: string;
   width: string;
   backendId: string;
+  image: string;
 };
 
 // API response shapes
@@ -94,22 +103,22 @@ type InterrogateResponse = {
 // Static data
 // ---------------------------------------------------------------------------
 const suspects: Suspect[] = [
-  { id: "noah",   name: "NOAH REED",     role: "THE STUDENT",       statement: "I just focused on my work. That night, I was in the lab.",                            position: "suspect-noah",   mask: "polygon(38% 2%,58% 0,74% 9%,79% 23%,72% 34%,87% 43%,98% 62%,94% 98%,4% 98%,0 64%,14% 42%,29% 34%,23% 19%)",           cycle: "4.6s", delay: "-.7s"  },
-  { id: "daniel", name: "DANIEL CROSS",  role: "THE PROFESSOR",     statement: "I saw someone near the chamber, but the storm made certainty impossible.",             position: "suspect-daniel", mask: "polygon(39% 1%,58% 1%,73% 12%,77% 29%,70% 38%,91% 51%,100% 96%,0 96%,5% 54%,29% 38%,24% 20%)",                       cycle: "3.9s", delay: "-2.1s" },
-  { id: "elias",  name: "ELIAS WIZARD",  role: "THE ADMINISTRATOR", statement: "Sensitive research was quarantined. That was procedure, not concealment.",            position: "suspect-elias",  mask: "polygon(38% 2%,61% 1%,74% 13%,72% 34%,91% 47%,96% 96%,4% 96%,8% 48%,29% 35%,27% 14%)",                              cycle: "4.9s", delay: "-1.3s" },
-  { id: "leena",  name: "LEENA RAO",     role: "THE COLLEAGUE",     statement: "I didn't alter the dataset. I copied it because something was wrong.",                position: "suspect-leena",  mask: "polygon(37% 1%,62% 0,78% 16%,75% 35%,94% 52%,100% 97%,0 97%,5% 53%,25% 36%,23% 17%)",                              cycle: "4.2s", delay: "-3.2s" },
-  { id: "ave",    name: "AVE MORGAN",    role: "THE FRIEND",        statement: "The camera failed. My token being used doesn't mean I was there.",                    position: "suspect-ave",    mask: "polygon(39% 0,60% 1%,76% 13%,82% 32%,73% 40%,94% 51%,100% 98%,0 98%,4% 51%,25% 39%,18% 20%)",                       cycle: "3.7s", delay: "-1.8s" },
+  { id: "noah",   name: "NOAH REED",     role: "THE STUDENT",       statement: "I just focused on my work. That night, I was in the lab.",                            position: "suspect-noah",   mask: "polygon(47.6% 19.4%,61.4% 25%,59.9% 32.6%,66% 42.4%,100% 54.2%,100% 100%,0 100%,0 52.8%,23% 42.4%,24.6% 33.3%,9.2% 27.1%)",           cycle: "4.6s", delay: "-.7s"  },
+  { id: "daniel", name: "DANIEL CROSS",  role: "THE PROFESSOR",     statement: "I saw someone near the chamber, but the storm made certainty impossible.",             position: "suspect-daniel", mask: "polygon(47% 20.1%,67% 23.6%,67% 33.3%,79.8% 41%,100% 45.1%,100% 100%,0 100%,0 47.2%,21.4% 40.3%,32.8% 32.6%,31.3% 22.9%)",                       cycle: "3.9s", delay: "-2.1s" },
+  { id: "elias",  name: "ELIAS WIZARD",  role: "THE ADMINISTRATOR", statement: "Sensitive research was quarantined. That was procedure, not concealment.",            position: "suspect-elias",  mask: "polygon(52.4% 19.4%,67.4% 22.9%,67.4% 32.6%,87.4% 41.7%,100% 48.6%,100% 100%,0 100%,0 47.9%,12.5% 41.7%,32.5% 32.6%,32.5% 22.2%)",                              cycle: "4.9s", delay: "-1.3s" },
+  { id: "leena",  name: "LEENA RAO",     role: "THE COLLEAGUE",     statement: "I didn't alter the dataset. I copied it because something was wrong.",                position: "suspect-leena",  mask: "polygon(52.7% 20.8%,74.1% 29.2%,82.6% 38.9%,92.6% 45.1%,100% 48.6%,100% 100%,0 100%,0 48.6%,8.5% 45.1%,17.1% 38.9%,25.6% 29.2%)",                              cycle: "4.2s", delay: "-3.2s" },
+  { id: "ave",    name: "AVE MORGAN",    role: "THE FRIEND",        statement: "The camera failed. My token being used doesn't mean I was there.",                    position: "suspect-ave",    mask: "polygon(52.7% 20.1%,85.5% 32.6%,96.9% 45.1%,100% 48.6%,100% 100%,0 100%,0 47.2%,5.7% 41.7%,17.1% 31.9%)",                       cycle: "3.7s", delay: "-1.8s" },
 ];
 
 const evidence: Evidence[] = [
-  { id: "access",      name: "ACCESS CARD",     code: "E01", detail: "Restricted-area credential assigned to observatory personnel.",                                      finding: "A credential proves authorization—not who physically carried it.",                                                        left: "6.5%",  width: "9%",  backendId: "door_sensor"        },
-  { id: "cctv",        name: "CCTV FOOTAGE",    code: "E02", detail: "Observation-chamber camera feed, timestamped 02:11:03.",                                             finding: "The camera became unavailable at 02:11. The interruption does not identify who caused it.",                            left: "16%",   width: "10%", backendId: "camera_blackout"    },
-  { id: "chat",        name: "CHAT LOGS",       code: "E03", detail: 'Messages: "you there?" — "we need to talk" — "it\'s serious..."',                                   finding: "Meena was attempting urgent contact shortly before the incident. The recipient is unclear.",                           left: "27%",   width: "10%", backendId: "emergency_message"  },
-  { id: "lab",         name: "LAB REPORT",      code: "E04", detail: "Confidential analysis of altered research and an unauthorized experiment.",                          finding: "This establishes motive only when connected to Meena's investigation.",                                              left: "38%",   width: "10%", backendId: "altered_dataset"    },
-  { id: "phone",       name: "PHONE RECORDS",   code: "E05", detail: "Calls and attempted communications across the critical period.",                                     finding: "Phone activity shows contact timing, not physical location.",                                                         left: "49%",   width: "10%", backendId: "emergency_message"  },
-  { id: "maintenance", name: "MAINTENANCE LOG", code: "E06", detail: "02:11 CamOverride · 02:12 Token AM-77 · 02:12 Secondary **** · 02:14 Transmission Queued",          finding: "The maintenance session required a second authorization. Ave's token alone was insufficient.",                       left: "60%",   width: "11%", backendId: "maintenance_log"    },
-  { id: "note",        name: "NOTE FRAGMENT",   code: "E07", detail: '"Do not trust the person who says they saw me." / "The truth is behind the west door."',           finding: "The fragment undermines Daniel's certainty and points toward the west door.",                                         left: "72%",   width: "10%", backendId: "witness_movement"   },
-  { id: "token",       name: "METAL TOKEN",     code: "E08", detail: "Maintenance token AM-77, associated with Ave Morgan.",                                               finding: "Ownership does not prove use. Someone deliberately wanted this traced to Ave.",                                       left: "83.5%", width: "9%",  backendId: "missing_token"      },
+  { id: "access",      name: "ACCESS CARD",     code: "E01", detail: "Restricted-area credential assigned to observatory personnel.",                                      finding: "A credential proves authorization—not who physically carried it.",                                                        left: "6.5%",  width: "9%",  backendId: "door_sensor",        image: accessEvidenceImg },
+  { id: "cctv",        name: "CCTV FOOTAGE",    code: "E02", detail: "Observation-chamber camera feed, timestamped 02:11:03.",                                             finding: "The camera became unavailable at 02:11. The interruption does not identify who caused it.",                            left: "16%",   width: "10%", backendId: "camera_blackout",    image: cctvEvidenceImg },
+  { id: "chat",        name: "CHAT LOGS",       code: "E03", detail: 'Messages: "you there?" — "we need to talk" — "it\'s serious..."',                                   finding: "Meena was attempting urgent contact shortly before the incident. The recipient is unclear.",                           left: "27%",   width: "10%", backendId: "emergency_message",  image: chatEvidenceImg },
+  { id: "lab",         name: "LAB REPORT",      code: "E04", detail: "Confidential analysis of altered research and an unauthorized experiment.",                          finding: "This establishes motive only when connected to Meena's investigation.",                                              left: "38%",   width: "10%", backendId: "altered_dataset",    image: labEvidenceImg },
+  { id: "phone",       name: "PHONE RECORDS",   code: "E05", detail: "Calls and attempted communications across the critical period.",                                     finding: "Phone activity shows contact timing, not physical location.",                                                         left: "49%",   width: "10%", backendId: "emergency_message",  image: phoneEvidenceImg },
+  { id: "maintenance", name: "MAINTENANCE LOG", code: "E06", detail: "02:11 CamOverride · 02:12 Token AM-77 · 02:12 Secondary **** · 02:14 Transmission Queued",          finding: "The maintenance session required a second authorization. Ave's token alone was insufficient.",                       left: "60%",   width: "11%", backendId: "maintenance_log",    image: maintenanceEvidenceImg },
+  { id: "note",        name: "NOTE FRAGMENT",   code: "E07", detail: '"Do not trust the person who says they saw me." / "The truth is behind the west door."',           finding: "The fragment undermines Daniel's certainty and points toward the west door.",                                         left: "72%",   width: "10%", backendId: "witness_movement",   image: noteEvidenceImg },
+  { id: "token",       name: "METAL TOKEN",     code: "E08", detail: "Maintenance token AM-77, associated with Ave Morgan.",                                               finding: "Ownership does not prove use. Someone deliberately wanted this traced to Ave.",                                       left: "83.5%", width: "9%",  backendId: "missing_token",      image: tokenEvidenceImg },
 ];
 
 const prompts = [
@@ -189,6 +198,15 @@ async function apiReset(): Promise<void> {
 // ---------------------------------------------------------------------------
 // Main game component
 // ---------------------------------------------------------------------------
+const ROUND_SECONDS = 20 * 60;
+
+function formatTime(seconds: number): string {
+  const safe = Math.max(0, seconds);
+  const m = String(Math.floor(safe / 60)).padStart(2, "0");
+  const s = String(safe % 60).padStart(2, "0");
+  return `${m}:${s}`;
+}
+
 export function SilentWitnessGame() {
   const [activeSuspect, setActiveSuspect] = useState<SuspectId | null>(null);
   const [activeEvidence, setActiveEvidence] = useState<EvidenceId | null>(null);
@@ -201,8 +219,11 @@ export function SilentWitnessGame() {
   const [questionsLeft, setQuestionsLeft] = useState<Record<SuspectId, number>>({ noah: 10, daniel: 10, elias: 10, leena: 10, ave: 10 });
   const [stressLabel, setStressLabel] = useState<Record<SuspectId, string>>({ noah: "CALM", daniel: "CALM", elias: "CALM", leena: "CALM", ave: "CALM" });
   const [confessed, setConfessed] = useState(false);
+  const [unsolved, setUnsolved] = useState(false);
+  const [secondsRemaining, setSecondsRemaining] = useState(ROUND_SECONDS);
   const [hoveredObject, setHoveredObject] = useState<string | null>(null);
   const [evidenceFileOpen, setEvidenceFileOpen] = useState(false);
+  const [evidenceFileIndex, setEvidenceFileIndex] = useState(0);
   const [loading, setLoading] = useState(false);
   const [apiError, setApiError] = useState<string | null>(null);
   const [revealedEvidence, setRevealedEvidence] = useState<Set<string>>(new Set());
@@ -210,16 +231,41 @@ export function SilentWitnessGame() {
   const suspect = suspects.find((item) => item.id === activeSuspect);
   const selectedEvidence = evidence.find((item) => item.id === activeEvidence);
   const progress = Math.min(100, milestones.length * 20);
+  const evidenceFilePage = evidence[evidenceFileIndex];
+
+  const gotoEvidencePage = useCallback((direction: 1 | -1) => {
+    setEvidenceFileIndex((current) => (current + direction + evidence.length) % evidence.length);
+  }, []);
 
   useEffect(() => {
     const closeExpandedView = (event: KeyboardEvent) => {
-      if (event.key !== "Escape") return;
-      setVictimOpen(false);
-      setEvidenceFileOpen(false);
+      if (event.key === "Escape") {
+        setVictimOpen(false);
+        setEvidenceFileOpen(false);
+        return;
+      }
+      if (!evidenceFileOpen) return;
+      if (event.key === "ArrowRight") gotoEvidencePage(1);
+      if (event.key === "ArrowLeft") gotoEvidencePage(-1);
     };
     window.addEventListener("keydown", closeExpandedView);
     return () => window.removeEventListener("keydown", closeExpandedView);
-  }, []);
+  }, [evidenceFileOpen, gotoEvidencePage]);
+
+  // 20-minute round timer — mirrors Adrian's case, but with its own longer budget.
+  useEffect(() => {
+    if (confessed || unsolved) return;
+    const id = window.setInterval(() => {
+      setSecondsRemaining((value) => Math.max(0, value - 1));
+    }, 1000);
+    return () => window.clearInterval(id);
+  }, [confessed, unsolved]);
+
+  useEffect(() => {
+    if (secondsRemaining === 0 && !confessed) {
+      setUnsolved(true);
+    }
+  }, [secondsRemaining, confessed]);
 
   // Process API response and update all state
   const applyResponse = useCallback((data: InterrogateResponse, suspectUiId: SuspectId) => {
@@ -293,6 +339,8 @@ export function SilentWitnessGame() {
     setStressLabel({ noah: "CALM", daniel: "CALM", elias: "CALM", leena: "CALM", ave: "CALM" });
     setQuestionsLeft({ noah: 10, daniel: 10, elias: 10, leena: 10, ave: 10 });
     setConfessed(false);
+    setUnsolved(false);
+    setSecondsRemaining(ROUND_SECONDS);
     setAnswer("");
     setActiveSuspect(null);
     setActiveEvidence(null);
@@ -309,9 +357,23 @@ export function SilentWitnessGame() {
         <img src={roomAsset} alt="Five suspects seated in the Larkridge Observatory interrogation room" className="case-room" />
         <div className="case-vignette" />
 
-        <div className="progress-hit" aria-label={`Case progress ${progress}%`}>
-          <span style={{ width: `${progress}%` }} />
-        </div>
+        <header className="sw-hud-top">
+          <div className="sw-hud-brand">
+            <span className="sw-hud-brand-name">PROMPT<span className="sw-hud-brand-x">X</span></span>
+            <small>THE SILENT WITNESS — INTERROGATION PROTOCOL</small>
+          </div>
+          <div className="sw-hud-progress" aria-label={`Case progress ${progress}%`}>
+            <div className="sw-hud-progress-label">
+              <span>CASE PROGRESS</span>
+              <b>{String(progress).padStart(3, "0")}%</b>
+            </div>
+            <div className="sw-hud-progress-track"><span style={{ width: `${progress}%` }} /></div>
+          </div>
+          <div className="sw-hud-meta">
+            <span>LOCATION: LARKRIDGE OBSERVATORY</span>
+            <span>CASE ID: SWD-001</span>
+          </div>
+        </header>
 
         {suspects.map((person) => (
           <InteractiveInvestigationObject
@@ -350,23 +412,34 @@ export function SilentWitnessGame() {
           mask="polygon(7% 28%,68% 0,100% 24%,91% 74%,31% 100%,0 72%)"
           sceneImage={roomAsset}
           cycle="5.2s"
-          onClick={() => setEvidenceFileOpen(true)}
+          onClick={() => { setEvidenceFileIndex(0); setEvidenceFileOpen(true); }}
         />
 
-        {evidence.map((item) => (
+        {evidence.map((item, index) => (
           <button
             key={item.id}
             aria-label={`Inspect ${item.name}`}
             className={`evidence-hit${revealedEvidence.has(item.backendId) ? " evidence-hit--revealed" : ""}`}
             style={{ left: item.left, width: item.width }}
-            onClick={() => setActiveEvidence(item.id)}
+            onClick={() => { setEvidenceFileIndex(index); setEvidenceFileOpen(true); }}
           />
         ))}
 
-        <div className="case-status">
-          <span>CASE PROGRESS {String(progress).padStart(3, "0")}%</span>
-          <span>MILESTONE {String(milestones.length).padStart(2, "0")}/05</span>
-        </div>
+        <footer className="sw-hud-bottom">
+          <div className="sw-hud-footer-brand">
+            <strong>PROMPT X</strong>
+            <small>— THE SILENT WITNESS</small>
+          </div>
+          <div className="sw-hud-footer-stats">
+            <span>TIME REMAINING <b className={secondsRemaining <= 60 ? "sw-hud-time-critical" : ""}>{formatTime(secondsRemaining)}</b></span>
+            <i className="sw-hud-divider" />
+            <span>EVIDENCE <b>{String(revealedEvidence.size).padStart(2, "0")}/08</b></span>
+            <i className="sw-hud-divider" />
+            <span>MILESTONE <b>{String(milestones.length).padStart(2, "0")}/05</b></span>
+            <i className="sw-hud-divider" />
+            <span>CASE PROGRESS <b>{String(progress).padStart(3, "0")}%</b></span>
+          </div>
+        </footer>
       </div>
 
       {/* Victim file modal */}
@@ -385,32 +458,31 @@ export function SilentWitnessGame() {
         </div>
       )}
 
-      {/* Evidence file modal */}
-      {evidenceFileOpen && (
+      {/* Evidence file modal — paginated, one evidence item per page */}
+      {evidenceFileOpen && evidenceFilePage && (
         <div className="modal-backdrop document-backdrop" onClick={() => setEvidenceFileOpen(false)}>
           <section className="evidence-file-modal document-view" onClick={(event) => event.stopPropagation()} aria-label="Evidence file details">
             <button className="icon-button" onClick={() => setEvidenceFileOpen(false)} aria-label="Close evidence file"><X /></button>
-            <div className="evidence-file-preview"><span>RESTRICTED</span><b>EVIDENCE</b><small>CASE // SWD-001</small></div>
-            <div className="document-data">
-              <small>[ EVIDENCE DETAILS ]</small><h2>{selectedEvidence?.name ?? "CASE EVIDENCE"}</h2><p className="document-role">CASE: MEENA SEN MURDER</p>
-              <dl><div><dt>EVIDENCE ID</dt><dd>{selectedEvidence?.code ?? "EV-001—008"}</dd></div><div><dt>TYPE</dt><dd>PHYSICAL / DIGITAL EVIDENCE</dd></div><div><dt>LOCATION</dt><dd>LARKRIDGE OBSERVATORY</dd></div><div><dt>STATUS</dt><dd>{selectedEvidence && revealedEvidence.has(selectedEvidence.backendId) ? "EXAMINED" : "UNDER INVESTIGATION"}</dd></div><div><dt>ASSOCIATED</dt><dd>NOAH · DANIEL · ELIAS · LEENA · AVE</dd></div></dl>
-              <h3>DESCRIPTION</h3><p>{selectedEvidence?.detail ?? "Eight recovered items establish the access, surveillance, communication, and authorization chain surrounding the observation chamber."}</p>
-              <h3>RELEVANCE / NOTES</h3><p>{selectedEvidence?.finding ?? "No single item proves guilt. Compare the maintenance session, secondary authorization, workstation activity, and physical access."}</p>
-              <button className="terminal-button" onClick={() => setEvidenceFileOpen(false)}>CLOSE / RETURN</button>
+            <div className="evidence-file-preview">
+              <img src={evidenceFilePage.image} alt={evidenceFilePage.name} className="evidence-file-image" />
+              <span className="evidence-file-tag">{evidenceFilePage.code} // EVIDENCE</span>
+              <div className="evidence-file-pager">
+                <button type="button" className="icon-button" onClick={() => gotoEvidencePage(-1)} aria-label="Previous evidence"><ChevronLeft /></button>
+                <span>{String(evidenceFileIndex + 1).padStart(2, "0")} / {String(evidence.length).padStart(2, "0")}</span>
+                <button type="button" className="icon-button" onClick={() => gotoEvidencePage(1)} aria-label="Next evidence"><ChevronRight /></button>
+              </div>
             </div>
-          </section>
-        </div>
-      )}
-
-      {/* Evidence quick-view modal (when no suspect selected) */}
-      {selectedEvidence && !activeSuspect && (
-        <div className="modal-backdrop" onClick={() => setActiveEvidence(null)}>
-          <section className="evidence-modal" onClick={(event) => event.stopPropagation()}>
-            <header><span>{selectedEvidence.code} // EVIDENCE</span><button className="icon-button" onClick={() => setActiveEvidence(null)} aria-label="Close evidence"><X /></button></header>
-            <p className="evidence-name">{selectedEvidence.name}</p>
-            <p>{selectedEvidence.detail}</p>
-            <div className="finding"><FileWarning size={20} /><span>{selectedEvidence.finding}</span></div>
-            <button className="terminal-button" onClick={() => { setPresenting(true); setActiveEvidence(selectedEvidence.id); void selectSuspect("noah", "Present the record. I'll explain what it actually proves."); }}>PRESENT TO NOAH</button>
+            <div className="document-data">
+              <small>[ EVIDENCE DETAILS ]</small><h2>{evidenceFilePage.name}</h2><p className="document-role">CASE: MEENA SEN MURDER</p>
+              <dl><div><dt>EVIDENCE ID</dt><dd>{evidenceFilePage.code}</dd></div><div><dt>TYPE</dt><dd>PHYSICAL / DIGITAL EVIDENCE</dd></div><div><dt>LOCATION</dt><dd>LARKRIDGE OBSERVATORY</dd></div><div><dt>STATUS</dt><dd>{revealedEvidence.has(evidenceFilePage.backendId) ? "EXAMINED" : "UNDER INVESTIGATION"}</dd></div><div><dt>ASSOCIATED</dt><dd>NOAH · DANIEL · ELIAS · LEENA · AVE</dd></div></dl>
+              <h3>DESCRIPTION</h3><p>{evidenceFilePage.detail}</p>
+              <h3>RELEVANCE / NOTES</h3><p>{evidenceFilePage.finding}</p>
+              <div className="evidence-file-actions">
+                <button type="button" className="terminal-button" onClick={() => gotoEvidencePage(-1)}><ChevronLeft size={16} /> PREV</button>
+                <button type="button" className="terminal-button" onClick={() => setEvidenceFileOpen(false)}>CLOSE / RETURN</button>
+                <button type="button" className="terminal-button" onClick={() => gotoEvidencePage(1)}>NEXT <ChevronRight size={16} /></button>
+              </div>
+            </div>
           </section>
         </div>
       )}
@@ -493,18 +565,38 @@ export function SilentWitnessGame() {
         </aside>
       )}
 
-      {/* Confession / case closed screen */}
-      {confessed && (
-        <div className="confession-screen">
-          <p className="case-closed">CASE CLOSED</p>
-          <small>NOAH REED HAS CONFESSED</small>
-          <blockquote>"I made the workstation look active. I used Ave's token because I knew you'd look at her. The authorization came through my system. Meena found the data. She knew what I had done. I couldn't let her expose it."</blockquote>
-          <dl>
-            <div><dt>SUSPECT</dt><dd>Noah Reed</dd></div>
-            <div><dt>VICTIM</dt><dd>Dr. Meena Sen</dd></div>
-            <div><dt>LOCATION</dt><dd>Larkridge Observatory</dd></div>
-            <div><dt>MOTIVE</dt><dd>Concealment of manipulated research</dd></div>
-          </dl>
+      {/* Confession / case closed / case unresolved screen — mirrors Adrian's
+          Confession.jsx structure, in the darker Silent Witness palette. */}
+      {(confessed || unsolved) && (
+        <div className={`confession-screen${confessed ? "" : " confession-screen--unsolved"}`}>
+          <p className="case-closed">{confessed ? "CASE CLOSED" : "CASE UNRESOLVED"}</p>
+          <small>{confessed ? "NOAH REED HAS CONFESSED" : "20-MINUTE TIME LIMIT REACHED"}</small>
+
+          {confessed && (
+            <blockquote>
+              {answer || "\"I made the workstation look active. I used Ave's token because I knew you'd look at her. The authorization came through my system. Meena found the data. She knew what I had done. I couldn't let her expose it.\""}
+            </blockquote>
+          )}
+
+          {confessed ? (
+            <dl>
+              <div><dt>SUSPECT</dt><dd>Noah Reed</dd></div>
+              <div><dt>VICTIM</dt><dd>Dr. Meena Sen</dd></div>
+              <div><dt>LOCATION</dt><dd>Larkridge Observatory</dd></div>
+              <div><dt>MOTIVE</dt><dd>Concealment of manipulated research</dd></div>
+            </dl>
+          ) : (
+            <p className="confession-unsolved-note">
+              The investigation ran out of time before the evidence chain against Noah could be closed.
+              Review the case file and try again.
+            </p>
+          )}
+
+          <p className="confession-meta">
+            CASE PROGRESS {String(progress).padStart(3, "0")}% — MILESTONES {String(milestones.length).padStart(2, "0")}/05
+            {!confessed && " — NO CONFESSION RECORDED"}
+          </p>
+
           <button className="terminal-button" onClick={() => { void reset(); }}><RotateCcw size={16} /> REOPEN CASE</button>
         </div>
       )}

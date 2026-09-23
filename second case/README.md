@@ -6,7 +6,7 @@ This folder is intentionally backend-only. Start it from the repository root:
 py -3.12 "second case/server.py"
 ```
 
-It listens on `http://127.0.0.1:8001`. The later UI should use the suspect list to render its selectable characters, then send questions to the selected suspect.
+It listens on `http://127.0.0.1:8010`. The later UI should use the suspect list to render its selectable characters, then send questions to the selected suspect.
 
 ## API surface
 
