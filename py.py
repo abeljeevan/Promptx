@@ -51,7 +51,7 @@ def generate_gemini_content(prompt: str) -> str:
     """
     request_body = {
         "contents": [{"role": "user", "parts": [{"text": prompt}]}],
-        "generationConfig": {"temperature": 0.8, "maxOutputTokens": 250},
+        "generationConfig": {"temperature": 0.8, "maxOutputTokens": 1000},
     }
     request = Request(
         f"https://{GEMINI_API_HOST}/v1beta/models/{MODEL}:generateContent?"
