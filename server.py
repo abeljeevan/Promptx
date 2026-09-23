@@ -321,19 +321,19 @@ def submit_result(req: ResultRequest):
     if session["result_submitted"]:
         return {"message": "Result already submitted.", "duplicate": True}
 
-    # Calculate score from authoritative server-side state
-    score = calculate_solution_score(game_state)
-    solved = 1 if game_state.status == "CONFESSION" else 0
-    questions_used = game_state.turn
-    milestones_completed = sum(1 for v in game_state.milestones.values() if v)
-    final_stress = game_state.stress
-
     # Time taken: prefer server-side timing, fall back to client seconds_remaining
     elapsed_server = _time.time() - session["started_at"]
     time_taken = min(int(elapsed_server), ROUND_SECONDS)
     # If game ended by time expiry, time_taken is the full round
     if game_state.status == "TIME_EXPIRED":
         time_taken = ROUND_SECONDS
+
+    # Calculate score from authoritative server-side state
+    score = calculate_solution_score(game_state, time_taken)
+    solved = 1 if game_state.status == "CONFESSION" else 0
+    questions_used = game_state.turn
+    milestones_completed = sum(1 for v in game_state.milestones.values() if v)
+    final_stress = game_state.stress
 
     outcome = game_state.status  # CONFESSION | OUT_OF_PROMPTS | TIME_EXPIRED | ENDED
     now = datetime.datetime.now().isoformat()

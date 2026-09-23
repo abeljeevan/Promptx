@@ -151,7 +151,6 @@ export function Leaderboard({ onBack, promoCode }) {
             <table className="lb-table">
               <thead>
                 <tr className="lb-thead-row">
-                  <th className="lb-th lb-th-rank">#</th>
                   <th className="lb-th lb-th-player">PROMO CODE</th>
                   <th className="lb-th lb-th-score">SCORE</th>
                   <th className="lb-th lb-th-prompts">TIME</th>
@@ -162,17 +161,17 @@ export function Leaderboard({ onBack, promoCode }) {
               <tbody>
                 {loading ? (
                   <tr>
-                    <td colSpan="6" className="lb-td-status">
+                    <td colSpan="5" className="lb-td-status">
                       <span className="lb-blink">█</span> ACCESSING ARCHIVES...
                     </td>
                   </tr>
                 ) : error ? (
                   <tr>
-                    <td colSpan="6" className="lb-td-status lb-td-error">{error}</td>
+                    <td colSpan="5" className="lb-td-status lb-td-error">{error}</td>
                   </tr>
                 ) : scores.length === 0 ? (
                   <tr>
-                    <td colSpan="6" className="lb-td-status">
+                    <td colSpan="5" className="lb-td-status">
                       NO RECORDS ON FILE
                     </td>
                   </tr>
@@ -189,12 +188,6 @@ export function Leaderboard({ onBack, promoCode }) {
                           borderColor: medal.borderColor,
                         } : {}}
                       >
-                        <td className="lb-td lb-td-rank">
-                          <span className="lb-rank-num" style={medal ? { color: medal.color } : {}}>
-                            {index + 1}
-                          </span>
-                          {isTopThree && <TrophyIcon rank={index} />}
-                        </td>
                         <td className="lb-td lb-td-player">
                           <AvatarIcon name={score.promo_code} />
                           <span
@@ -217,7 +210,7 @@ export function Leaderboard({ onBack, promoCode }) {
                           {score.questions_used}
                         </td>
                         <td className="lb-td lb-td-center">
-                          {score.solved ? "✅" : "❌"}
+                          {score.solved ? "✓" : "✕"}
                         </td>
                       </tr>
                     );
@@ -276,7 +269,7 @@ export function Leaderboard({ onBack, promoCode }) {
                     </div>
                     <div style={{ display: "flex", justifyContent: "space-between" }}>
                       <span style={{ color: "var(--px-terminal-dim)" }}>SOLVED</span>
-                      <strong>{myRankData.solved ? "✅" : "❌"}</strong>
+                      <strong>{myRankData.solved ? "✓" : "✕"}</strong>
                     </div>
                   </div>
                 </div>

@@ -357,7 +357,7 @@ def calculate_solution_score(state: GameState, time_taken: int = 600) -> int:
         score += 8
     if state.milestones.get("motive"):
         score += 8
-    if "physical_clue" in state.evidence_revealed or "paperweight_murder_weapon" in state.facts_established:
+    if state.milestones.get("final"):
         score += 8
         
     # 2. EVIDENCE CONNECTIONS - 25 POINTS (5 pts per evidence, max 5)
@@ -384,7 +384,7 @@ def calculate_solution_score(state: GameState, time_taken: int = 600) -> int:
     minutes_remaining = max(0, int((600 - time_taken) / 60))
     score += min(5, minutes_remaining)
     
-    return score
+    return min(100, score)
 
 
 # ============================================================
