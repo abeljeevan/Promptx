@@ -1,0 +1,11 @@
+:root {
+  --px-black: #0a0906;
+  --px-surface: #211c14;
+  --px-terminal: #a8d59a;
+  --px-terminal-dim: #708b68;
+  --px-warning: #9f3029;
+  --px-paper: #d8c49c;
+  --px-tungsten: #c98a45;
+  --px-hairline: rgb(168 213 154 / 55%);
+  --px-mono: "IBM Plex Mono", "Courier Prime", ui-monospace, monospace;
+}
