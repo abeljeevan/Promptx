@@ -21,6 +21,7 @@ import maintenanceEvidenceImg from "../assets/evidence/maintenance.png";
 import noteEvidenceImg from "../assets/evidence/note.png";
 import tokenEvidenceImg from "../assets/evidence/token.png";
 import { InteractiveInvestigationObject } from "./InteractiveInvestigationObject";
+import { BackgroundMusic } from "./BackgroundMusic";
 
 // ---------------------------------------------------------------------------
 // Backend configuration
@@ -536,8 +537,17 @@ export function SilentWitnessGame() {
     submitting.current = false;
   }, []);
 
+  // The tense loop runs for the whole investigation and stops when the case
+  // ends; a solved case plays the same case-solved sting as Adrian's case.
+  const music = confessed
+    ? { src: "/audio/case-solved.mp3", loop: false, label: "case solved theme" }
+    : unsolved
+      ? null
+      : { src: "/audio/silent-witness-loop.mp3", loop: true, label: "Silent Witness soundtrack" };
+
   return (
     <main className="case-shell">
+      {music && <BackgroundMusic key={music.src} {...music} />}
       <Canvas className="case-atmosphere" camera={{ position: [0, 0, 5], fov: 55 }} dpr={1}>
         <Atmosphere />
       </Canvas>

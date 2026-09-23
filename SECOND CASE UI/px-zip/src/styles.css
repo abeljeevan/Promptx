@@ -183,9 +183,9 @@ button, input { font: inherit; }
    evidence stack, instead of floating by the mug. */
 .table-prop--victim { left: 8%; top: 61.5%; width: 8.2%; aspect-ratio: 4 / 3; transform: rotate(-9deg); filter: brightness(.82) sepia(.12); transition: filter .25s ease, transform .25s ease; }
 .table-prop--victim[data-active="true"], .table-prop--victim:focus-visible { filter: brightness(1.02) sepia(.04); transform: rotate(-9deg) translateY(-4%); }
-/* Evidence stack: Adrian's case prop, laid over the stack painted into the
-   room and tipped back so it sits flat on the table like the original. */
-.table-prop--evidence { left: 15.8%; top: 53.5%; width: 19%; aspect-ratio: 610 / 439; transform-origin: 50% 35%; transform: perspective(900px) rotateX(50deg) rotate(-4deg); filter: brightness(.72) sepia(.18) saturate(.9); transition: filter .25s ease; }
+/* Evidence stack: Adrian's case prop at its own proportions (no perspective
+   squash), laid over the stack painted into the room. */
+.table-prop--evidence { left: 16.4%; top: 55%; width: 17%; aspect-ratio: 610 / 439; transform: rotate(-3deg); filter: brightness(.72) sepia(.18) saturate(.9); transition: filter .25s ease; }
 .table-prop--evidence[data-active="true"], .table-prop--evidence:focus-visible { filter: brightness(.98) sepia(.06); }
 
 /* Pin + label over each file, matching the ◉ NAME markers above the suspects. */
@@ -275,6 +275,11 @@ button, input { font: inherit; }
 .confession-unsolved-note { max-width: 520px; margin: 1rem 0; color: var(--case-muted); line-height: 1.7; font-size: .82rem; }
 .confession-meta { margin: .2rem 0 .6rem; font-size: .68rem; color: var(--case-muted); letter-spacing: .1em; }
 .sw-hud-time-critical { color: var(--case-alert) !important; }
+
+/* Music on/off, as in Adrian's case. Above the end screen, below modals. */
+.music-toggle { position: fixed; z-index: 35; bottom: 3.4rem; left: 1.5rem; padding: .4rem .55rem; border: 1px solid var(--case-line); background: rgb(6 10 7 / 86%); color: var(--case-green); font-size: .64rem; letter-spacing: .12em; cursor: pointer; }
+.music-toggle:hover, .music-toggle:focus-visible { border-color: var(--case-green); outline: none; }
+.music-toggle:disabled { cursor: not-allowed; color: var(--case-muted); }
 
 /* Suspect photo beside their name in the interrogation panel. */
 .interrogation-id { display: flex; align-items: center; gap: .8rem; }
