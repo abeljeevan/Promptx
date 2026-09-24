@@ -94,6 +94,11 @@ SUSPECT_API_KEYS: dict[str, str] = {
     "daniel_cross": _env("GEMINI_API_KEY_DANIEL") or "REDACTED",
 }
 
+# Shared backup keys, tried in order after a suspect's own key fails.
+BACKUP_API_KEYS: list[str] = [
+    k.strip() for k in (_env("GEMINI_BACKUP_KEYS") or "").split(",") if k.strip()
+]
+
 SUSPECTS: dict[str, dict[str, str]] = {
     "noah_reed":    {"name": "Dr. Noah Reed",       "role": "Signal Engineer",     "summary": "Maintains the systems at the center of the technical evidence.", "sketch": "noah_reed.md"},
     "leena_rao":    {"name": "Dr. Leena Rao",        "role": "Data Scientist",       "summary": "Found irregularities in the Project Door dataset.",              "sketch": "leena_rao.md"},
@@ -335,7 +340,7 @@ def build_prompt(state: CaseState, suspect_id: str, question: str, newly_reveale
     )
 
 
-def _call_gemini_http(prompt: str, api_key: str) -> str:
+def _call_gemini_http(prompt: str, api_key: str, attempts: int = 3) -> str:
     """Call Gemini REST API directly. Raises on all errors."""
     url = f"https://{GEMINI_HOST}/v1beta/models/{MODEL}:generateContent?{urlencode({'key': api_key})}"
     body = json.dumps({
@@ -349,9 +354,9 @@ def _call_gemini_http(prompt: str, api_key: str) -> str:
     req = Request(url, data=body, headers={"Content-Type": "application/json"}, method="POST")
 
     last_exc: Exception = RuntimeError("No attempts made")
-    for attempt in range(3):
+    for attempt in range(attempts):
         try:
-            with urlopen(req, timeout=30, context=SSL_CONTEXT) as resp:
+            with urlopen(req, timeout=20, context=SSL_CONTEXT) as resp:
                 payload = json.loads(resp.read().decode("utf-8"))
             reply = payload["candidates"][0]["content"]["parts"][0]["text"].strip()
             if len(reply) < 15:
@@ -360,34 +365,39 @@ def _call_gemini_http(prompt: str, api_key: str) -> str:
         except HTTPError as exc:
             body_text = exc.read().decode("utf-8", errors="replace")
             print(f"[Gemini HTTP {exc.code}] attempt {attempt + 1}: {body_text[:200]}", flush=True)
-            if exc.code not in {429, 500, 502, 503, 504} or attempt == 2:
+            if exc.code not in {429, 500, 502, 503, 504} or attempt == attempts - 1:
                 raise RuntimeError(f"Gemini HTTP {exc.code}: {body_text[:200]}") from exc
             time.sleep(2 * (attempt + 1))
         except (URLError, OSError, TimeoutError) as exc:
             last_exc = exc
             print(f"[Gemini network error] attempt {attempt + 1}: {type(exc).__name__}: {exc}", flush=True)
-            if attempt == 2:
+            if attempt == attempts - 1:
                 raise RuntimeError(f"Network unreachable: {exc}") from exc
             time.sleep(1)
         except Exception as exc:
             raise RuntimeError(f"Unexpected Gemini error: {exc}") from exc
 
-    raise RuntimeError(f"Gemini gave up after 3 attempts: {last_exc}") from last_exc
+    raise RuntimeError(f"Gemini gave up after {attempts} attempts: {last_exc}") from last_exc
 
 
 def generate_reply(suspect_id: str, prompt: str, proven_facts: set[str]) -> str:
     """
     Generate a character reply.
-    - Attempts Gemini API with the character's dedicated key.
-    - On ANY failure (network, auth, timeout, etc.) returns a rich offline fallback.
+    - Attempts Gemini API with the character's dedicated key, then each backup
+      key in turn (one attempt per key, so the chain fits the 45s budget).
+    - On ANY failure of every key (network, auth, timeout, etc.) returns a rich offline fallback.
     - NEVER raises — this is a guaranteed safe call.
     """
-    api_key = SUSPECT_API_KEYS.get(suspect_id, "")
-    try:
-        return _call_gemini_http(prompt, api_key)
-    except Exception as exc:
-        print(f"[FALLBACK] {suspect_id} using offline reply. Reason: {type(exc).__name__}: {exc}", flush=True)
-        return fallback_reply(suspect_id, proven_facts)
+    keys = list(dict.fromkeys(k for k in [SUSPECT_API_KEYS.get(suspect_id, ""), *BACKUP_API_KEYS] if k))
+    last_exc: Exception = RuntimeError("No Gemini API key configured")
+    for index, api_key in enumerate(keys):
+        try:
+            return _call_gemini_http(prompt, api_key, attempts=1 if len(keys) > 1 else 3)
+        except Exception as exc:
+            last_exc = exc
+            print(f"[Gemini key #{index + 1}] {suspect_id} failed: {type(exc).__name__}: {exc}", flush=True)
+    print(f"[FALLBACK] {suspect_id} using offline reply. Reason: {type(last_exc).__name__}: {last_exc}", flush=True)
+    return fallback_reply(suspect_id, proven_facts)
 
 
 # ---------------------------------------------------------------------------
@@ -480,6 +490,7 @@ def health() -> dict[str, Any]:
         "status": "ok",
         "case": "The Silent Witness",
         "keys_configured": configured,
+        "backup_keys": len(BACKUP_API_KEYS),
         "model": MODEL,
         "network_reachable": network_ok,
         "mode": "live" if network_ok else "offline_fallback",

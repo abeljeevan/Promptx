@@ -8,7 +8,7 @@ import json
 import ssl
 from urllib.request import Request, urlopen
 from urllib.parse import urlencode
-from urllib.error import HTTPError
+from urllib.error import HTTPError, URLError
 
 import truststore
 
@@ -30,12 +30,23 @@ MODEL = "gemini-3-flash-preview"
 
 # Load environment variable or local .env if available
 API_KEY = os.getenv("GEMINI_API_KEY")
-if not API_KEY and os.path.exists(".env"):
+_BACKUP_KEYS = os.getenv("GEMINI_BACKUP_KEYS")
+if (not API_KEY or not _BACKUP_KEYS) and os.path.exists(".env"):
     with open(".env", "r", encoding="utf-8") as _env_file:
         for _line in _env_file:
-            if _line.strip().startswith("GEMINI_API_KEY="):
-                API_KEY = _line.strip().split("=", 1)[1].strip().strip('"').strip("'")
-                break
+            _name, _, _value = _line.strip().partition("=")
+            _value = _value.strip().strip('"').strip("'")
+            if _name == "GEMINI_API_KEY" and not API_KEY:
+                API_KEY = _value
+            elif _name == "GEMINI_BACKUP_KEYS" and not _BACKUP_KEYS:
+                _BACKUP_KEYS = _value
+
+# Primary key first, then the comma-separated backups, tried in order when a
+# call fails (quota exhausted, revoked key, server error, network error).
+API_KEYS = list(dict.fromkeys(
+    k.strip() for k in [API_KEY or "", *(_BACKUP_KEYS or "").split(",")] if k.strip()
+))
+API_KEY = API_KEYS[0] if API_KEYS else None
 
 if not API_KEY:
     print("[WARNING] GEMINI_API_KEY not found in environment or .env file.")
@@ -49,31 +60,31 @@ def generate_gemini_content(prompt: str) -> str:
     The request uses the operating system's trusted certificate store and
     resolves the Gemini hostname normally.
     """
-    request_body = {
+    request_body = json.dumps({
         "contents": [{"role": "user", "parts": [{"text": prompt}]}],
         "generationConfig": {"temperature": 0.8, "maxOutputTokens": 1000},
-    }
-    request = Request(
-        f"https://{GEMINI_API_HOST}/v1beta/models/{MODEL}:generateContent?"
-        f"{urlencode({'key': API_KEY})}",
-        data=json.dumps(request_body).encode("utf-8"),
-        headers={
-            "Content-Type": "application/json",
-            "User-Agent": "Prompt-X/1.0",
-        },
-        method="POST",
-    )
-    for attempt in range(2):
+    }).encode("utf-8")
+    last_exc: Exception = RuntimeError("No Gemini API key configured")
+    for index, key in enumerate(API_KEYS):
+        request = Request(
+            f"https://{GEMINI_API_HOST}/v1beta/models/{MODEL}:generateContent?"
+            f"{urlencode({'key': key})}",
+            data=request_body,
+            headers={
+                "Content-Type": "application/json",
+                "User-Agent": "Prompt-X/1.0",
+            },
+            method="POST",
+        )
         try:
-            with urlopen(request, timeout=30, context=GEMINI_SSL_CONTEXT) as response:
+            with urlopen(request, timeout=20, context=GEMINI_SSL_CONTEXT) as response:
                 payload = json.loads(response.read().decode("utf-8"))
-            break
-        except HTTPError as exc:
-            if exc.code not in {429, 500, 502, 503, 504} or attempt:
-                raise
-            time.sleep(2)
+            return payload["candidates"][0]["content"]["parts"][0]["text"]
+        except (HTTPError, URLError, OSError, KeyError, IndexError, ValueError) as exc:
+            last_exc = exc
+            print(f"[WARNING] Gemini key #{index + 1} failed: {type(exc).__name__}: {exc}", flush=True)
 
-    return payload["candidates"][0]["content"]["parts"][0]["text"]
+    raise last_exc
 
 
 # ============================================================
@@ -1243,7 +1254,7 @@ async def ask_adrian_with_validator(question: str, state: GameState, pressure_po
                     generate_gemini_content,
                     prompt,
                 ),
-                timeout=32,
+                timeout=45,
             )
 
             raw_text = response.strip() if response else ""
