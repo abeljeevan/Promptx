@@ -469,11 +469,23 @@ def clear_leaderboard(x_admin_key: str | None = Header(default=None)):
 
     conn = get_db()
     try:
+        # results must go first — it references students(id).
         deleted = conn.execute("DELETE FROM results").rowcount
+        conn.execute("DELETE FROM students")
         conn.commit()
-        return {"message": "Leaderboard cleared.", "rows_deleted": deleted}
     finally:
         conn.close()
+
+    # In-memory sessions still hold student_id values that no longer exist
+    # in the DB, so a player who was mid-session when this ran would fail
+    # to submit a result afterwards. Drop both cases' live sessions too.
+    active_sessions.clear()
+    try:
+        sys.modules["case2_server"].cases.clear()
+    except KeyError:
+        pass  # not running inside combined_app.py (e.g. local `python server.py`)
+
+    return {"message": "Leaderboard cleared.", "rows_deleted": deleted}
 
 
 @app.get("/api/leaderboard/my-rank")
