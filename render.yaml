@@ -1,8 +1,0 @@
-services:
-  - type: web
-    name: prompt-x
-    runtime: docker
-    healthCheckPath: /api/health
-    envVars:
-      - key: GEMINI_API_KEY
-        sync: false

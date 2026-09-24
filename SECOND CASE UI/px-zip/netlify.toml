@@ -1,0 +1,14 @@
+[build]
+  command = "npm run build"
+  publish = "dist"
+
+[build.environment]
+  NITRO_PRESET = "netlify"
+
+# Proxies relative /api/* calls to Case 2's routes on the combined Railway
+# backend (mounted under /case2).
+[[redirects]]
+  from = "/api/*"
+  to = "https://promptx-backend-production-f53c.up.railway.app/case2/api/:splat"
+  status = 200
+  force = true

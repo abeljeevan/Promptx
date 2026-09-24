@@ -1,0 +1,13 @@
+[build]
+  base = "frontend"
+  publish = "dist"
+  command = "npm run build"
+
+# Proxies relative /api/* calls (used throughout the React app) to the
+# Railway-hosted FastAPI backend, so the frontend code needs no changes and
+# there's no CORS round-trip.
+[[redirects]]
+  from = "/api/*"
+  to = "https://promptx-backend-production-f53c.up.railway.app/api/:splat"
+  status = 200
+  force = true

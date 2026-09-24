@@ -20,6 +20,9 @@ dist-ssr
 .wrangler/
 .dev.vars
 
+# Netlify CLI local deploy state
+.netlify/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

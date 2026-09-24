@@ -26,7 +26,9 @@ import { BackgroundMusic } from "./BackgroundMusic";
 // ---------------------------------------------------------------------------
 // Backend configuration
 // ---------------------------------------------------------------------------
-const BACKEND_URL = "http://127.0.0.1:8010";
+// Empty in production: Netlify proxies relative /api/* calls to the Render
+// backend (see netlify.toml). Locally it points straight at the dev server.
+const BACKEND_URL = import.meta.env.DEV ? "http://127.0.0.1:8010" : "";
 
 
 // Map UI suspect IDs → backend suspect IDs

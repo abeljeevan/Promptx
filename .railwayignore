@@ -1,0 +1,9 @@
+frontend/
+SECOND CASE UI/
+assets/
+BGM/
+docs/
+*.md
+tests/
+conftest.py
+py.py.bak
