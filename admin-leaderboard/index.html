@@ -1,0 +1,191 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>PROMPT X — Live Leaderboard</title>
+<link rel="icon" href="data:,">
+<style>
+  :root {
+    --void: oklch(0.055 0.012 105);
+    --bright: oklch(0.93 0.025 100);
+    --muted: oklch(0.66 0.035 112);
+    --green: oklch(0.79 0.12 135);
+    --line: oklch(0.48 0.09 135 / 45%);
+    --alert: oklch(0.58 0.2 28);
+    --warm: oklch(0.8 0.055 75);
+    --mono: "IBM Plex Mono", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    background:
+      radial-gradient(ellipse at 50% 0%, color-mix(in oklab, var(--green) 6%, transparent), transparent 55%),
+      var(--void);
+    color: var(--bright);
+    font-family: var(--mono);
+    padding: 2.5rem 1.5rem 4rem;
+  }
+  header {
+    max-width: 1000px;
+    margin: 0 auto 2rem;
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 1rem;
+    border-bottom: 1px solid var(--line);
+    padding-bottom: 1.25rem;
+  }
+  h1 {
+    margin: 0;
+    font-size: 1.4rem;
+    letter-spacing: .18em;
+    font-weight: 500;
+  }
+  h1 span { color: var(--green); }
+  .live {
+    display: flex;
+    align-items: center;
+    gap: .5rem;
+    font-size: .68rem;
+    letter-spacing: .14em;
+    color: var(--muted);
+  }
+  .dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: var(--green);
+    box-shadow: 0 0 8px var(--green);
+    animation: pulse 1.6s ease-in-out infinite;
+  }
+  @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: .25; } }
+  main { max-width: 1000px; margin: 0 auto; }
+  .meta {
+    font-size: .68rem;
+    letter-spacing: .1em;
+    color: var(--muted);
+    margin-bottom: 1rem;
+    display: flex;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: .5rem;
+  }
+  table { width: 100%; border-collapse: collapse; font-size: .82rem; }
+  thead th {
+    text-align: left;
+    color: var(--green);
+    font-weight: 500;
+    letter-spacing: .1em;
+    font-size: .66rem;
+    padding: .6rem .75rem;
+    border-bottom: 1px solid var(--line);
+    white-space: nowrap;
+  }
+  tbody td {
+    padding: .7rem .75rem;
+    border-bottom: 1px solid color-mix(in oklab, var(--line) 60%, transparent);
+    white-space: nowrap;
+  }
+  tbody tr:hover { background: color-mix(in oklab, var(--green) 5%, transparent); }
+  .rank { color: var(--muted); font-variant-numeric: tabular-nums; width: 3rem; }
+  .rank-1 { color: var(--warm); font-weight: 700; }
+  .code { color: var(--bright); font-weight: 600; letter-spacing: .05em; }
+  .score { font-variant-numeric: tabular-nums; }
+  .total { color: var(--green); font-weight: 700; font-size: .95rem; }
+  .solved { color: var(--green); }
+  .unsolved { color: var(--muted); }
+  .dash { color: var(--muted); }
+  .empty, .error, .loading {
+    text-align: center;
+    padding: 4rem 1rem;
+    color: var(--muted);
+    letter-spacing: .08em;
+    font-size: .8rem;
+  }
+  .error { color: var(--alert); }
+  footer {
+    max-width: 1000px;
+    margin: 2rem auto 0;
+    font-size: .62rem;
+    letter-spacing: .08em;
+    color: var(--muted);
+    text-align: center;
+  }
+</style>
+</head>
+<body>
+  <header>
+    <h1>PROMPT <span>X</span> — LIVE LEADERBOARD</h1>
+    <div class="live"><span class="dot"></span> AUTO-REFRESHING</div>
+  </header>
+  <main>
+    <div class="meta">
+      <span id="count-label">—</span>
+      <span id="updated-label">—</span>
+    </div>
+    <div id="content" class="loading">LOADING SCORES…</div>
+  </main>
+  <footer>CASE 1 · ADRIAN VALE &nbsp;+&nbsp; CASE 2 · THE SILENT WITNESS &nbsp;=&nbsp; COMBINED TOTAL</footer>
+
+<script>
+  const REFRESH_MS = 5000;
+  const contentEl = document.getElementById("content");
+  const countEl = document.getElementById("count-label");
+  const updatedEl = document.getElementById("updated-label");
+
+  function esc(str) {
+    const d = document.createElement("div");
+    d.textContent = str ?? "";
+    return d.innerHTML;
+  }
+
+  function fmtScore(v) {
+    return v === null || v === undefined ? '<span class="dash">—</span>' : Math.round(v);
+  }
+
+  function render(rows) {
+    if (!rows.length) {
+      contentEl.innerHTML = '<div class="empty">NO RESULTS RECORDED YET</div>';
+      countEl.textContent = "0 PLAYERS";
+      return;
+    }
+    countEl.textContent = `${rows.length} PLAYER${rows.length === 1 ? "" : "S"}`;
+    const body = rows.map((row) => {
+      const rankClass = row.rank === 1 ? "rank rank-1" : "rank";
+      const solvedClass = row.case2_solved ? "solved" : "unsolved";
+      const solvedLabel = row.case2_score == null ? '<span class="dash">—</span>' : (row.case2_solved ? "SOLVED" : "UNSOLVED");
+      return `<tr>
+        <td class="${rankClass}">${row.rank}</td>
+        <td class="code">${esc(row.promo_code)}</td>
+        <td class="score">${fmtScore(row.case1_score)}</td>
+        <td class="score">${fmtScore(row.case2_score)}</td>
+        <td class="${solvedClass}">${solvedLabel}</td>
+        <td class="total">${fmtScore(row.total_score)}</td>
+      </tr>`;
+    }).join("");
+    contentEl.innerHTML = `<table>
+      <thead><tr>
+        <th>#</th><th>CODE</th><th>CASE 1</th><th>CASE 2</th><th>CASE 2 STATUS</th><th>TOTAL</th>
+      </tr></thead>
+      <tbody>${body}</tbody>
+    </table>`;
+  }
+
+  async function load() {
+    try {
+      const res = await fetch("/api/leaderboard", { headers: { "Accept": "application/json" } });
+      if (!res.ok) throw new Error(`Server returned ${res.status}`);
+      const data = await res.json();
+      render(data.leaderboard || []);
+      updatedEl.textContent = "UPDATED " + new Date().toLocaleTimeString();
+    } catch (err) {
+      contentEl.innerHTML = `<div class="error">FAILED TO LOAD — ${esc(err.message)}</div>`;
+    }
+  }
+
+  load();
+  setInterval(load, REFRESH_MS);
+</script>
+</body>
+</html>

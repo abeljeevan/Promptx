@@ -1,0 +1,9 @@
+[build]
+  publish = "."
+
+# Combined leaderboard (both cases) lives on Case 2's routes.
+[[redirects]]
+  from = "/api/leaderboard"
+  to = "https://promptx-backend-production-f53c.up.railway.app/case2/api/leaderboard"
+  status = 200
+  force = true

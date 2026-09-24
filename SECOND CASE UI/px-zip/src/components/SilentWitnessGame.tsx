@@ -102,6 +102,7 @@ type CaseProgress = {
   milestones: Record<string, boolean>;
   final_accusation_ready: boolean;
   solved: boolean;
+  current_score: number;
 };
 
 type InterrogateResponse = {
@@ -359,6 +360,7 @@ export function SilentWitnessGame() {
   const [code, setCode] = useState<string>(() => readPlayerCode());
   const [codeDraft, setCodeDraft] = useState("");
   const [case1Score, setCase1Score] = useState<number | null>(null);
+  const [case2Score, setCase2Score] = useState(0);
   const [result, setResult] = useState<CaseResult | null>(null);
   const [resultError, setResultError] = useState<string | null>(null);
   const [leaderboardOpen, setLeaderboardOpen] = useState(false);
@@ -384,6 +386,7 @@ export function SilentWitnessGame() {
         setConfessed(snapshot.progress.solved);
         setUnsolved(!snapshot.progress.solved && snapshot.seconds_remaining === 0);
         setCase1Score(player.case1_score);
+        setCase2Score(snapshot.progress.current_score);
         for (const item of roster.suspects) {
           const id = BACKEND_TO_UI_SUSPECT[item.id];
           if (!id) continue;
@@ -471,6 +474,8 @@ export function SilentWitnessGame() {
 
     // Update revealed evidence
     setRevealedEvidence(new Set(data.case.revealed_evidence));
+
+    setCase2Score(data.case.current_score);
 
     if (data.case.solved) {
       setConfessed(true);
@@ -666,6 +671,8 @@ export function SilentWitnessGame() {
                 <i className="sw-hud-divider" />
               </>
             )}
+            <span title="Live estimate — finalizes on accusation or time-out">CASE 2 SCORE <b>{String(case2Score).padStart(3, "0")}</b></span>
+            <i className="sw-hud-divider" />
             <span>TIME REMAINING <b className={secondsRemaining <= 60 ? "sw-hud-time-critical" : ""}>{formatTime(secondsRemaining)}</b></span>
             <i className="sw-hud-divider" />
             <span>EVIDENCE <b>{String(revealedEvidence.size).padStart(2, "0")}/08</b></span>

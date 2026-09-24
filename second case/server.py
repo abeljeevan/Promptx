@@ -244,12 +244,18 @@ def case_progress(state: CaseState) -> dict[str, Any]:
     facts = state.proven_facts
     milestones = case_milestones(facts)
     proof_ready = all(milestones.values()) and "token_created_ambiguity" in facts
+    # Live estimate of the in-progress score (milestones + evidence found so
+    # far; the solved/efficiency/time bonuses stay 0 until the case closes,
+    # same as calculate_case2_score does for an unsolved state).
+    elapsed = int(time.time() - state.started_at)
+    current_score = calculate_case2_score(state, elapsed)["total"]
     return {
         "revealed_evidence": sorted(state.revealed_evidence),
         "proven_facts": sorted(facts),
         "milestones": milestones,
         "final_accusation_ready": proof_ready,
         "solved": state.solved,
+        "current_score": current_score,
     }
 
 

@@ -172,7 +172,7 @@ def health_check():
 # ──────────────────────────────────────────────────────────────
 @app.post("/api/login")
 def login(req: LoginRequest):
-    code = req.code.strip()
+    code = req.code.strip().upper()
     if not code:
         raise HTTPException(status_code=400, detail="Participant code cannot be empty.")
 
@@ -197,8 +197,13 @@ def login(req: LoginRequest):
 
 
 def _login_or_get(code: str) -> tuple[int, str]:
-    """Register/find student and return (student_id, code). Internal helper."""
-    code = code.strip()
+    """Register/find student and return (student_id, code). Internal helper.
+
+    Uppercased to match Case 2's X-Player-Code normalization (player_key in
+    second case/server.py) — otherwise the same promo code typed in mixed
+    case creates two separate students.code rows, splitting the leaderboard.
+    """
+    code = code.strip().upper()
     if not code:
         raise HTTPException(status_code=400, detail="Participant code cannot be empty.")
 
@@ -455,7 +460,7 @@ def get_my_rank(code: str = ""):
     Uses the exact same ORDER BY as the global leaderboard so rank is
     consistent between the two views.
     """
-    code = code.strip()
+    code = code.strip().upper()
     if not code:
         raise HTTPException(status_code=400, detail="Promo code required.")
 
