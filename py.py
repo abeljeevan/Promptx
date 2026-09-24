@@ -62,7 +62,16 @@ def generate_gemini_content(prompt: str) -> str:
     """
     request_body = json.dumps({
         "contents": [{"role": "user", "parts": [{"text": prompt}]}],
-        "generationConfig": {"temperature": 0.8, "maxOutputTokens": 1000},
+        # thinkingBudget 0: Adrian's replies are direct dialogue, not
+        # multi-step reasoning, and the extended thinking tokens this model
+        # spends by default (dozens per call even on trivial prompts) were
+        # burning through the shared key pool's quota much faster than
+        # needed, causing more frequent full-pool exhaustion under load.
+        "generationConfig": {
+            "temperature": 0.8,
+            "maxOutputTokens": 1000,
+            "thinkingConfig": {"thinkingBudget": 0},
+        },
     }).encode("utf-8")
     last_exc: Exception = RuntimeError("No Gemini API key configured")
     for index, key in enumerate(API_KEYS):
