@@ -12,10 +12,22 @@ from pydantic import BaseModel
 
 # Import py module functions and GameState
 try:
-    from py import GameState, process_turn, MAX_PROMPTS, out_of_prompts_response, calculate_solution_score
+    from py import (
+        GameState, process_turn, MAX_PROMPTS, out_of_prompts_response, calculate_solution_score,
+        generate_controlled_confession, get_stress_state,
+    )
 except ImportError:
     sys.path.append(os.path.dirname(__file__))
-    from py import GameState, process_turn, MAX_PROMPTS, out_of_prompts_response, calculate_solution_score
+    from py import (
+        GameState, process_turn, MAX_PROMPTS, out_of_prompts_response, calculate_solution_score,
+        generate_controlled_confession, get_stress_state,
+    )
+
+# Dev/demo shortcut: typing this as a question instantly resolves the case
+# instead of going through Gemini, so the confession + leaderboard flow can
+# be exercised without a real interrogation.
+CHEAT_CODE = "honeyabel"
+ALL_EVIDENCE_IDS = ["access_card", "cctv", "phone_records", "daniel_files", "physical_clue"]
 
 app = FastAPI(title="Prompt-X Interrogation API")
 
@@ -254,6 +266,26 @@ async def interrogate(req: QuestionRequest):
 
     session = _get_session(req.code)
     game_state = session["game_state"]
+
+    if req.question.strip().lower() == CHEAT_CODE and game_state.status not in ("CONFESSION", "OUT_OF_PROMPTS"):
+        for key in game_state.milestones:
+            game_state.milestones[key] = True
+        game_state.evidence_revealed.update(ALL_EVIDENCE_IDS)
+        game_state.stress = 100
+        game_state.stress_state = get_stress_state(100)
+        game_state.status = "CONFESSION"
+        game_state.confession_unlocked = True
+        return {
+            "response": generate_controlled_confession(game_state),
+            "stress": game_state.stress,
+            "stress_state": game_state.stress_state,
+            "status": "CONFESSION",
+            "prompts_left": max(0, MAX_PROMPTS - game_state.turn),
+            "evidence_revealed": list(game_state.evidence_revealed),
+            "milestones": game_state.milestones,
+            "turn": game_state.turn,
+            "confession": True,
+        }
 
     if game_state.status == "CONFESSION":
         return {

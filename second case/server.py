@@ -51,6 +51,10 @@ SKETCH_DIR = CASE_DIR / "character_sketches"
 ROOT_ENV = CASE_DIR.parent / ".env"
 MODEL = "gemini-3.6-flash"
 GEMINI_HOST = "generativelanguage.googleapis.com"
+
+# Dev/demo shortcut: typing this as a question to any suspect instantly
+# resolves the case, mirroring the forced-confession path in reply_to().
+CHEAT_CODE = "solarbiju"
 MAX_QUESTIONS_PER_SUSPECT = 10
 ROUND_SECONDS = 20 * 60  # matches the frontend's 20-minute round
 
@@ -540,7 +544,24 @@ def get_suspect(suspect_id: str, state: CaseState = Depends(current_case)) -> di
 @app.post("/api/suspects/{suspect_id}/interrogate")
 async def interrogate(suspect_id: str, request: QuestionRequest, state: CaseState = Depends(current_case)) -> dict[str, Any]:
     ensure_suspect(suspect_id)
-    return await reply_to(state, suspect_id, request.question.strip(), set(), True)
+    question = request.question.strip()
+
+    if question.lower() == CHEAT_CODE and not state.solved:
+        state.mark_solved()
+        state.suspects["noah_reed"].status = "CONFESSED"
+        state.revealed_evidence.update(EVIDENCE.keys())
+        state.proven_facts.update(item["fact"] for item in EVIDENCE.values())
+        confession_reply = (
+            "Noah's precision finally fails him. The authenticated maintenance sequence, physical interaction, "
+            "camera blackout, token activity, and Meena's discovery leave no innocent explanation. He admits "
+            "he built ambiguity around the evidence to conceal the altered signal data and silence Meena."
+        )
+        suspect = state.suspects[suspect_id]
+        suspect.history.append({"question": question, "reply": confession_reply})
+        suspect.history[:] = suspect.history[-6:]
+        return response_envelope(state, suspect_id, confession_reply, sorted(EVIDENCE.keys()), 0)
+
+    return await reply_to(state, suspect_id, question, set(), True)
 
 
 @app.post("/api/suspects/{suspect_id}/present-evidence")
