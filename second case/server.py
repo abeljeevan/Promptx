@@ -793,7 +793,10 @@ def submit_result(key: str = Depends(player_key), state: CaseState = Depends(cur
 
 
 # Best result per player per case, then the two cases added together.
-# Ranked: highest total -> lowest combined time.
+# Starts from students (not results) so a player shows up the moment they
+# enter their participant code on Case 1's Start screen — before they've
+# finished, or even started, either case — with zero/null scores until they
+# complete one. Ranked: highest total -> lowest combined time.
 LEADERBOARD_SQL = """
     WITH best AS (
         SELECT r.student_id, r.case_id, r.score, r.time_taken, r.solved,
@@ -809,11 +812,10 @@ LEADERBOARD_SQL = """
                MAX(CASE WHEN b.case_id = :case1 THEN b.score END)  AS case1_score,
                MAX(CASE WHEN b.case_id = :case2 THEN b.score END)  AS case2_score,
                MAX(CASE WHEN b.case_id = :case2 THEN b.solved END) AS case2_solved,
-               SUM(b.score)      AS total_score,
-               SUM(b.time_taken) AS total_time
-        FROM best b
-        JOIN students s ON s.id = b.student_id
-        WHERE b.rn = 1
+               COALESCE(SUM(b.score), 0)      AS total_score,
+               COALESCE(SUM(b.time_taken), 0) AS total_time
+        FROM students s
+        LEFT JOIN best b ON b.student_id = s.id AND b.rn = 1
         GROUP BY s.id
     )
     SELECT *, ROW_NUMBER() OVER (ORDER BY total_score DESC, total_time ASC) AS rank
