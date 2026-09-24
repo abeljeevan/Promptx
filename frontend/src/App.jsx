@@ -15,7 +15,7 @@ const SILENT_WITNESS_URL = import.meta.env.VITE_SILENT_WITNESS_URL || "http://lo
 // The participant code travels with the player so The Silent Witness can add its
 // score to this case's on the combined leaderboard.
 function playNextCase(code) {
-  const url = new URL(SILENT_WITNESS_URL);
+  const url = new URL(SILENT_WITNESS_URL, window.location.origin);
   if (code) url.searchParams.set("code", code);
   window.location.href = url.toString();
 }

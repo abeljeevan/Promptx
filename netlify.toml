@@ -1,13 +1,18 @@
 [build]
-  base = "frontend"
-  publish = "dist"
-  command = "npm run build"
+  publish = "merged_deploy"
+  functions = "SECOND CASE UI/px-zip/.netlify/functions-internal"
 
-# Proxies relative /api/* calls (used throughout the React app) to the
-# Railway-hosted FastAPI backend, so the frontend code needs no changes and
-# there's no CORS round-trip.
+# Case 1's own API (relative /api/* calls throughout its React app).
 [[redirects]]
   from = "/api/*"
   to = "https://promptx-backend-production-f53c.up.railway.app/api/:splat"
+  status = 200
+  force = true
+
+# Case 2's API, prefixed so it doesn't collide with Case 1's /api/* above
+# (see BACKEND_URL in SilentWitnessGame.tsx).
+[[redirects]]
+  from = "/case2/api/*"
+  to = "https://promptx-backend-production-f53c.up.railway.app/case2/api/:splat"
   status = 200
   force = true

@@ -26,9 +26,11 @@ import { BackgroundMusic } from "./BackgroundMusic";
 // ---------------------------------------------------------------------------
 // Backend configuration
 // ---------------------------------------------------------------------------
-// Empty in production: Netlify proxies relative /api/* calls to the Render
-// backend (see netlify.toml). Locally it points straight at the dev server.
-const BACKEND_URL = import.meta.env.DEV ? "http://127.0.0.1:8010" : "";
+// In production this app is merged onto Case 1's domain under /case2, so its
+// own /api/* calls are prefixed the same way to avoid colliding with Case 1's
+// /api/* (Netlify proxies /case2/api/* to the backend — see netlify.toml).
+// Locally it points straight at the dev server.
+const BACKEND_URL = import.meta.env.DEV ? "http://127.0.0.1:8010" : "/case2";
 
 
 // Map UI suspect IDs → backend suspect IDs

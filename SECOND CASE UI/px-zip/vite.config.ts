@@ -11,5 +11,11 @@ export default defineConfig({
     // Redirect TanStack Start's bundled server entry to src/server.ts (our SSR error wrapper).
     // nitro/vite builds from this
     server: { entry: "server" },
+    // Served under /case2 on the same Netlify site as Case 1, so every
+    // route and server function is generated with that prefix.
+    router: { basepath: "/case2" },
   },
+  // Built asset URLs (JS/CSS/images) also need the /case2 prefix so they
+  // resolve under the same site instead of colliding with Case 1's /assets.
+  vite: { base: "/case2/" },
 });
