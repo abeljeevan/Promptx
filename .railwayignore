@@ -3,7 +3,10 @@ SECOND CASE UI/
 assets/
 BGM/
 docs/
-*.md
 tests/
 conftest.py
 py.py.bak
+
+# Top-level docs only — NOT second case/character_sketches/*.md, which the
+# backend reads at runtime (load_sketch in second case/server.py).
+/*.md
