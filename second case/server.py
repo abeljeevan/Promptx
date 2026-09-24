@@ -60,7 +60,8 @@ ROUND_SECONDS = 20 * 60  # matches the frontend's 20-minute round
 
 # Shared with Adrian's case (server.py). Its results are stored under the case id
 # "silent_witness" — a historical name that actually means Adrian's case.
-DB_PATH = CASE_DIR.parent / "leaderboard.db"
+# Same override as server.py — must point at the same file (shared leaderboard).
+DB_PATH = Path(os.getenv("DB_PATH", str(CASE_DIR.parent / "leaderboard.db")))
 CASE1_ID = "silent_witness"
 CASE2_ID = "silent_witness_door"
 

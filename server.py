@@ -33,7 +33,10 @@ app = FastAPI(title="Prompt-X Interrogation API")
 
 PROJECT_ROOT = Path(__file__).resolve().parent
 FRONTEND_DIST = PROJECT_ROOT / "frontend" / "dist"
-DB_PATH = PROJECT_ROOT / "leaderboard.db"
+# DB_PATH env var points this at a persistent volume in deployment (Railway's
+# container filesystem is ephemeral and gets wiped on every redeploy/restart
+# otherwise — ask before changing this back to a bare relative path).
+DB_PATH = Path(os.getenv("DB_PATH", str(PROJECT_ROOT / "leaderboard.db")))
 
 ROUND_SECONDS = 10 * 60  # 10-minute interrogation limit
 
