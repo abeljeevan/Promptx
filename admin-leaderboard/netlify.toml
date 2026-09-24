@@ -7,3 +7,10 @@
   to = "https://promptx-backend-production-f53c.up.railway.app/case2/api/leaderboard"
   status = 200
   force = true
+
+# Clear action lives on Case 1's server, which owns the shared DB file.
+[[redirects]]
+  from = "/api/leaderboard/clear"
+  to = "https://promptx-backend-production-f53c.up.railway.app/api/leaderboard/clear"
+  status = 200
+  force = true

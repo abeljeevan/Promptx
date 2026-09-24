@@ -4,7 +4,7 @@ import sqlite3
 import datetime
 import time as _time
 from pathlib import Path
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
@@ -449,6 +449,29 @@ def get_leaderboard():
             """
         ).fetchall()
         return {"leaderboard": [dict(r) for r in rows]}
+    finally:
+        conn.close()
+
+
+# ──────────────────────────────────────────────────────────────
+# ADMIN — wipe the shared leaderboard (both cases' results).
+# Gated by ADMIN_KEY so the public leaderboard site can't be cleared by
+# anyone who just has the URL. Fails closed: if ADMIN_KEY isn't configured
+# on the server, the endpoint refuses rather than allowing an empty key.
+# ──────────────────────────────────────────────────────────────
+@app.post("/api/leaderboard/clear")
+def clear_leaderboard(x_admin_key: str | None = Header(default=None)):
+    admin_key = os.getenv("ADMIN_KEY")
+    if not admin_key:
+        raise HTTPException(status_code=503, detail="ADMIN_KEY is not configured on the server.")
+    if not x_admin_key or x_admin_key != admin_key:
+        raise HTTPException(status_code=403, detail="Invalid admin key.")
+
+    conn = get_db()
+    try:
+        deleted = conn.execute("DELETE FROM results").rowcount
+        conn.commit()
+        return {"message": "Leaderboard cleared.", "rows_deleted": deleted}
     finally:
         conn.close()
 

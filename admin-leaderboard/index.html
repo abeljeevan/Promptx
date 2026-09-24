@@ -112,6 +112,109 @@
     color: var(--muted);
     text-align: center;
   }
+  .admin-bar {
+    max-width: 1000px;
+    margin: 1.5rem auto 0;
+    display: flex;
+    justify-content: flex-end;
+  }
+  .clear-btn {
+    font-family: var(--mono);
+    font-size: .64rem;
+    letter-spacing: .1em;
+    color: var(--alert);
+    background: color-mix(in oklab, var(--alert) 8%, transparent);
+    border: 1px solid color-mix(in oklab, var(--alert) 45%, transparent);
+    border-radius: 3px;
+    padding: .45rem .9rem;
+    cursor: pointer;
+    transition: background .15s ease;
+  }
+  .clear-btn:hover { background: color-mix(in oklab, var(--alert) 18%, transparent); }
+  .clear-status {
+    font-size: .64rem;
+    letter-spacing: .08em;
+    color: var(--muted);
+    margin-top: .5rem;
+    text-align: right;
+    max-width: 1000px;
+    margin-left: auto;
+    margin-right: auto;
+  }
+  .clear-status.ok { color: var(--green); }
+  .clear-status.err { color: var(--alert); }
+
+  .modal-backdrop {
+    position: fixed; inset: 0;
+    background: color-mix(in oklab, var(--void) 80%, transparent);
+    display: flex; align-items: center; justify-content: center;
+    padding: 1.5rem;
+    z-index: 10;
+  }
+  .modal-backdrop[hidden] { display: none; }
+  .modal {
+    width: min(420px, 100%);
+    background: var(--void);
+    border: 1px solid color-mix(in oklab, var(--alert) 40%, var(--line));
+    border-radius: 6px;
+    padding: 1.5rem;
+  }
+  .modal h2 {
+    margin: 0 0 .75rem;
+    font-size: .9rem;
+    letter-spacing: .1em;
+    color: var(--alert);
+  }
+  .modal p {
+    font-size: .74rem;
+    line-height: 1.6;
+    color: var(--muted);
+    margin: 0 0 1rem;
+  }
+  .modal label {
+    display: block;
+    font-size: .64rem;
+    letter-spacing: .08em;
+    color: var(--muted);
+    margin-bottom: .3rem;
+  }
+  .modal input {
+    width: 100%;
+    font-family: var(--mono);
+    font-size: .8rem;
+    background: color-mix(in oklab, var(--bright) 4%, transparent);
+    border: 1px solid var(--line);
+    border-radius: 3px;
+    color: var(--bright);
+    padding: .5rem .6rem;
+    margin-bottom: 1rem;
+  }
+  .modal input:focus { outline: 1px solid var(--green); }
+  .modal-actions { display: flex; justify-content: flex-end; gap: .6rem; }
+  .modal-cancel {
+    font-family: var(--mono);
+    font-size: .68rem;
+    letter-spacing: .08em;
+    background: transparent;
+    border: 1px solid var(--line);
+    color: var(--muted);
+    border-radius: 3px;
+    padding: .5rem 1rem;
+    cursor: pointer;
+  }
+  .modal-confirm {
+    font-family: var(--mono);
+    font-size: .68rem;
+    letter-spacing: .08em;
+    background: var(--alert);
+    border: 1px solid var(--alert);
+    color: var(--void);
+    font-weight: 700;
+    border-radius: 3px;
+    padding: .5rem 1rem;
+    cursor: pointer;
+  }
+  .modal-confirm:disabled { opacity: .4; cursor: not-allowed; }
 </style>
 </head>
 <body>
@@ -126,7 +229,26 @@
     </div>
     <div id="content" class="loading">LOADING SCORES…</div>
   </main>
+  <div class="admin-bar">
+    <button type="button" class="clear-btn" id="open-clear">CLEAR LEADERBOARD</button>
+  </div>
+  <div id="clear-status" class="clear-status"></div>
   <footer>CASE 1 · ADRIAN VALE &nbsp;+&nbsp; CASE 2 · THE SILENT WITNESS &nbsp;=&nbsp; COMBINED TOTAL</footer>
+
+  <div class="modal-backdrop" id="clear-modal" hidden>
+    <div class="modal">
+      <h2>// CLEAR LEADERBOARD</h2>
+      <p>This permanently deletes every recorded result for both cases. It cannot be undone.</p>
+      <label for="admin-key-input">ADMIN KEY</label>
+      <input type="password" id="admin-key-input" autocomplete="off" placeholder="admin key" />
+      <label for="confirm-input">TYPE "CLEAR" TO CONFIRM</label>
+      <input type="text" id="confirm-input" autocomplete="off" placeholder="CLEAR" />
+      <div class="modal-actions">
+        <button type="button" class="modal-cancel" id="cancel-clear">CANCEL</button>
+        <button type="button" class="modal-confirm" id="confirm-clear" disabled>CLEAR EVERYTHING</button>
+      </div>
+    </div>
+  </div>
 
 <script>
   const REFRESH_MS = 5000;
@@ -186,6 +308,64 @@
 
   load();
   setInterval(load, REFRESH_MS);
+
+  // Clear leaderboard flow
+  const modal = document.getElementById("clear-modal");
+  const openBtn = document.getElementById("open-clear");
+  const cancelBtn = document.getElementById("cancel-clear");
+  const confirmBtn = document.getElementById("confirm-clear");
+  const keyInput = document.getElementById("admin-key-input");
+  const confirmInput = document.getElementById("confirm-input");
+  const statusEl = document.getElementById("clear-status");
+
+  const ADMIN_KEY_STORAGE = "px_admin_key";
+
+  function openModal() {
+    keyInput.value = localStorage.getItem(ADMIN_KEY_STORAGE) || "";
+    confirmInput.value = "";
+    confirmBtn.disabled = true;
+    modal.hidden = false;
+    keyInput.focus();
+  }
+
+  function closeModal() {
+    modal.hidden = true;
+  }
+
+  function refreshConfirmState() {
+    confirmBtn.disabled = confirmInput.value.trim() !== "CLEAR" || !keyInput.value.trim();
+  }
+
+  openBtn.addEventListener("click", openModal);
+  cancelBtn.addEventListener("click", closeModal);
+  modal.addEventListener("click", (e) => { if (e.target === modal) closeModal(); });
+  keyInput.addEventListener("input", refreshConfirmState);
+  confirmInput.addEventListener("input", refreshConfirmState);
+
+  confirmBtn.addEventListener("click", async () => {
+    const key = keyInput.value.trim();
+    confirmBtn.disabled = true;
+    confirmBtn.textContent = "CLEARING…";
+    try {
+      const res = await fetch("/api/leaderboard/clear", {
+        method: "POST",
+        headers: { "X-Admin-Key": key },
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.detail || `Server returned ${res.status}`);
+      localStorage.setItem(ADMIN_KEY_STORAGE, key);
+      statusEl.textContent = `LEADERBOARD CLEARED (${data.rows_deleted ?? 0} ROWS REMOVED)`;
+      statusEl.className = "clear-status ok";
+      closeModal();
+      load();
+    } catch (err) {
+      statusEl.textContent = "CLEAR FAILED — " + err.message;
+      statusEl.className = "clear-status err";
+    } finally {
+      confirmBtn.disabled = false;
+      confirmBtn.textContent = "CLEAR EVERYTHING";
+    }
+  });
 </script>
 </body>
 </html>
